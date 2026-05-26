@@ -1,0 +1,278 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background: #0f1923;
+  color: #ffffff;
+  min-height: 100vh;
+}
+
+#app {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+}
+
+h1 {
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -2px;
+  line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+h2 {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+h3 {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #6b7280;
+  margin-bottom: 0.75rem;
+}
+
+p {
+  font-size: 14px;
+  color: #9ca3af;
+  margin-bottom: 1.5rem;
+  line-height: 1.6;
+}
+
+label {
+  display: block;
+  font-size: 13px;
+  color: #9ca3af;
+  margin-bottom: 6px;
+}
+
+input, select {
+  width: 100%;
+  padding: 12px 14px;
+  background: #1e2d3d;
+  border: 1px solid #2d3f50;
+  border-radius: 10px;
+  color: #ffffff;
+  font-size: 15px;
+  font-family: inherit;
+  margin-bottom: 1rem;
+  outline: none;
+  transition: border-color .2s;
+}
+
+input:focus, select:focus {
+  border-color: #22c55e;
+}
+
+select option {
+  background: #1e2d3d;
+}
+
+.btn {
+  width: 100%;
+  padding: 14px;
+  border-radius: 10px;
+  border: none;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .2s;
+  margin-bottom: 10px;
+}
+
+.btn-primary {
+  background: #22c55e;
+  color: #0f1923;
+}
+
+.btn-primary:hover { background: #16a34a; }
+.btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+
+.btn-secondary {
+  background: #1e2d3d;
+  color: #ffffff;
+  border: 1px solid #2d3f50;
+}
+
+.btn-secondary:hover { background: #2d3f50; }
+
+.sep {
+  height: 1px;
+  background: #2d3f50;
+  margin: 1.5rem 0;
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 1rem;
+}
+
+.badge-green { background: #14532d; color: #22c55e; }
+.badge-red   { background: #450a0a; color: #ef4444; }
+.badge-blue  { background: #1e3a5f; color: #60a5fa; }
+
+/* Lobby */
+.player-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #2d3f50;
+  border-radius: 10px;
+  margin-bottom: 8px;
+  background: #1e2d3d;
+}
+
+.player-row.filled { border-color: #22c55e; background: #14532d22; }
+.player-row.empty  { opacity: .4; }
+
+.player-avatar {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: #22c55e22;
+  color: #22c55e;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 16px;
+}
+
+.player-info { flex: 1; }
+.player-name { font-size: 14px; font-weight: 600; }
+.player-role { font-size: 12px; color: #9ca3af; }
+
+/* Rôles */
+.role-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 1rem;
+}
+
+.role-card {
+  padding: 12px;
+  border: 1px solid #2d3f50;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: center;
+  background: #1e2d3d;
+  transition: all .2s;
+}
+
+.role-card:hover  { border-color: #22c55e; }
+.role-card.selected { border-color: #22c55e; background: #14532d33; }
+
+.role-icon { font-size: 24px; margin-bottom: 6px; }
+.role-name { font-size: 13px; font-weight: 600; }
+.role-desc { font-size: 11px; color: #9ca3af; margin-top: 3px; }
+
+/* Pollution bar */
+.pollution-bar { margin-bottom: 1.5rem; }
+.pbar-header {
+  display: flex; justify-content: space-between;
+  align-items: center; margin-bottom: 8px;
+}
+.pbar-val { font-size: 24px; font-weight: 700; }
+.pbar-track {
+  height: 10px; border-radius: 5px;
+  background: #1e2d3d; overflow: hidden;
+}
+.pbar-fill { height: 100%; border-radius: 5px; transition: width .5s, background .5s; }
+.pbar-legend {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: #6b7280; margin-top: 4px;
+}
+
+/* Stats */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 1.5rem;
+}
+
+.stat-card {
+  padding: 12px;
+  background: #1e2d3d;
+  border-radius: 10px;
+  border: 1px solid #2d3f50;
+}
+
+.stat-label { font-size: 11px; color: #9ca3af; margin-bottom: 4px; }
+.stat-val   { font-size: 22px; font-weight: 700; }
+
+/* Bâtiments */
+.building-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #2d3f50;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  background: #1e2d3d;
+}
+
+.b-icon { font-size: 20px; }
+.b-info { flex: 1; }
+.b-name { font-size: 13px; font-weight: 600; }
+.b-level { font-size: 11px; color: #9ca3af; }
+
+.b-pips { display: flex; gap: 4px; }
+.b-pip {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #2d3f50;
+}
+.b-pip.on { background: #22c55e; }
+
+/* Événements */
+.event-card {
+  padding: 14px;
+  border-radius: 10px;
+  margin-bottom: 1rem;
+  border: 1px solid;
+}
+.event-card.neg { background: #450a0a22; border-color: #7f1d1d; }
+.event-card.pos { background: #14532d22; border-color: #166534; }
+.event-card.neu { background: #1c1917; border-color: #44403c; }
+.event-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.event-desc  { font-size: 12px; color: #9ca3af; }
+
+/* Log */
+.log-entry {
+  font-size: 12px; color: #9ca3af;
+  padding: 5px 0;
+  border-bottom: 1px solid #1e2d3d;
+}
+
+.error {
+  font-size: 12px;
+  color: #ef4444;
+  margin-bottom: 8px;
+}
+
+.wait-center {
+  text-align: center;
+  padding: 2rem 0;
+}
+
+.wait-count {
+  font-size: 64px;
+  font-weight: 800;
+  color: #22c55e;
+  line-height: 1;
+}
+
+.wait-label {
+  font-size: 14px;
+  color: #9ca3af;
+  margin-top: 6px;
+}
