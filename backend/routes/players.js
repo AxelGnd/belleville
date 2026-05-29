@@ -6,16 +6,16 @@ router.post('/join', async (req, res) => {
   const { pseudo, slot, role } = req.body;
 
   try {
-    let [games] = await db.query(
+    let result = await db.query(
       "SELECT * FROM games WHERE status='waiting' LIMIT 1"
     );
 
     let game_id;
-    if (games.length === 0) {
-      const [result] = await db.query(
-        "INSERT INTO games (status) VALUES ('waiting')"
+    if (result.rows.length === 0) {
+      const newGame = await db.query(
+        "INSERT INTO games (status) VALUES ('waiting') RETURNING id"
       );
-      game_id = result.insertId;
+      game_id = newGame.rows[0].id;
 
       const buildings = [
         'hopital','ecole','recherche',
@@ -23,33 +23,33 @@ router.post('/join', async (req, res) => {
       ];
       for (const type of buildings) {
         await db.query(
-          "INSERT INTO buildings (game_id, type, level) VALUES (?,?,0)",
+          "INSERT INTO buildings (game_id, type, level) VALUES ($1,$2,0)",
           [game_id, type]
         );
       }
     } else {
-      game_id = games[0].id;
+      game_id = result.rows[0].id;
     }
 
-    const [existing] = await db.query(
-      "SELECT * FROM players WHERE game_id=? AND slot=?",
+    const existing = await db.query(
+      "SELECT * FROM players WHERE game_id=$1 AND slot=$2",
       [game_id, slot]
     );
-    if (existing.length > 0) {
+    if (existing.rows.length > 0) {
       return res.status(409).json({ error: 'Slot déjà pris' });
     }
 
     await db.query(
-      "INSERT INTO players (game_id, pseudo, slot, role) VALUES (?,?,?,?)",
+      "INSERT INTO players (game_id, pseudo, slot, role) VALUES ($1,$2,$3,$4)",
       [game_id, pseudo, slot, role]
     );
 
-    const [players] = await db.query(
-      "SELECT * FROM players WHERE game_id=?",
+    const players = await db.query(
+      "SELECT * FROM players WHERE game_id=$1",
       [game_id]
     );
 
-    res.json({ game_id, players });
+    res.json({ game_id, players: players.rows });
 
   } catch (err) {
     console.error(err);
@@ -58,11 +58,11 @@ router.post('/join', async (req, res) => {
 });
 
 router.get('/:game_id', async (req, res) => {
-  const [players] = await db.query(
-    "SELECT * FROM players WHERE game_id=?",
+  const players = await db.query(
+    "SELECT * FROM players WHERE game_id=$1",
     [req.params.game_id]
   );
-  res.json(players);
+  res.json(players.rows);
 });
 
 module.exports = router;
