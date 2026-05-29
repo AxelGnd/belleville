@@ -64,5 +64,19 @@ router.get('/:game_id', async (req, res) => {
   );
   res.json(players.rows);
 });
-
+router.get('/current', async (req, res) => {
+  try {
+    const game = await db.query(
+      "SELECT * FROM games WHERE status='waiting' ORDER BY id DESC LIMIT 1"
+    );
+    if (game.rows.length === 0) return res.json([]);
+    const players = await db.query(
+      "SELECT * FROM players WHERE game_id=$1",
+      [game.rows[0].id]
+    );
+    res.json(players.rows);
+  } catch (err) {
+    res.json([]);
+  }
+});
 module.exports = router;

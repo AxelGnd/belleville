@@ -9,27 +9,27 @@ let state = {
 };
 
 const ROLES = [
-  { id:'promoteur',    icon:'🏘', name:'Le Promoteur',    desc:'2 Résidentiels Nv2' },
-  { id:'scientifique', icon:'🔬', name:'Le Scientifique',  desc:'Recherche + Hôpital Nv2' },
-  { id:'ecologiste',   icon:'🌿', name:'L\'Écologiste',    desc:'4 Vertes + Pollution < 3' },
-  { id:'industriel',   icon:'🏭', name:'L\'Industriel',    desc:'Fossile Nv2 + Poll > 15' },
-  { id:'maire',        icon:'🏛', name:'Le Maire',         desc:'Tous publics Nv1+' },
-  { id:'banquier',     icon:'💰', name:'Le Banquier',      desc:'12 cr + Résidentiel Nv2' },
-  { id:'urbaniste',    icon:'📐', name:'L\'Urbaniste',     desc:'4 Résidentiels + École Nv2' },
-  { id:'technocrate',  icon:'⚙', name:'Le Technocrate',   desc:'Recherche Nv2 + 3 Vertes' },
+  { id:'promoteur',    icon:'🏘', name:'The Promoter',     desc:'2 Residential Lv2' },
+  { id:'scientifique', icon:'🔬', name:'The Scientist',     desc:'Research + Hospital Lv2' },
+  { id:'ecologiste',   icon:'🌿', name:'The Ecologist',     desc:'4 Green + Pollution < 3' },
+  { id:'industriel',   icon:'🏭', name:'The Industrialist', desc:'Fossil Lv2 + Poll > 15' },
+  { id:'maire',        icon:'🏛', name:'The Mayor',         desc:'All public buildings Lv1+' },
+  { id:'banquier',     icon:'💰', name:'The Banker',        desc:'12 cr + Residential Lv2' },
+  { id:'urbaniste',    icon:'📐', name:'The Urbanist',      desc:'4 Residential + School Lv2' },
+  { id:'technocrate',  icon:'⚙', name:'The Technocrat',    desc:'Research Lv2 + 3 Green' },
 ];
 
 const EVENTS = [
-  { type:'neg', title:'Vague de Froid',         desc:'Résidentiels consomment +1 Énergie ce tour.' },
-  { type:'neg', title:'Fuite Toxique ☣',        desc:'+2 Pollution immédiatement.' },
-  { type:'neg', title:'Pénurie de matériaux',   desc:'Améliorer coûte +1 cr ce tour.' },
-  { type:'neg', title:'Ciel Couvert',           desc:'Énergies Vertes produisent 0 ce tour.' },
-  { type:'neg', title:'Crise Respiratoire ☣',  desc:'Chaque joueur perd 1 cr.' },
-  { type:'pos', title:'Subventions Européennes',desc:'Chaque joueur reçoit +2 cr.' },
-  { type:'pos', title:'Avancée Technologique',  desc:'Améliorer vers Nv2 coûte 2 cr de moins.' },
-  { type:'pos', title:'Journée de la Terre',    desc:'Prochaine dépollution gratuite.' },
-  { type:'neu', title:'Élections Municipales',  desc:'Sans Grand Projet ce tour : +1 Pollution.' },
-  { type:'neu', title:'Audit Écologique',       desc:'Fossile Nv2 : +2 Poll. Fossile Nv1 : -1 Poll.' },
+  { type:'neg', title:'Cold Wave',            desc:'All Residential buildings consume +1 Energy this turn.' },
+  { type:'neg', title:'Toxic Leak ☣',         desc:'+2 Pollution immediately.' },
+  { type:'neg', title:'Material Shortage',    desc:'Upgrading a building costs +1 cr this turn.' },
+  { type:'neg', title:'Cloudy & No Wind',     desc:'Green Energy produces 0 this turn.' },
+  { type:'neg', title:'Respiratory Crisis ☣', desc:'Each player loses 1 cr.' },
+  { type:'pos', title:'European Subsidies',   desc:'Each player receives +2 cr immediately.' },
+  { type:'pos', title:'Tech Breakthrough',    desc:'Upgrading to Lv2 costs 2 cr less this turn.' },
+  { type:'pos', title:'Earth Day',            desc:'Next depollution action this turn is free.' },
+  { type:'neu', title:'Municipal Elections',  desc:'No Grand Project this turn: +1 Pollution.' },
+  { type:'neu', title:'Ecological Audit',     desc:'Fossil Lv2: +2 Poll. Fossil Lv1: -1 Poll.' },
 ];
 
 const BUILDING_ICONS = {
@@ -37,74 +37,148 @@ const BUILDING_ICONS = {
   residentiel:'🏘', eolienne:'💨', solaire:'☀️', parc:'🌳'
 };
 
+const BUILDING_NAMES = {
+  hopital:'Hospital', ecole:'School', recherche:'Research Center',
+  residentiel:'Residential', eolienne:'Wind Turbine', solaire:'Solar Panel', parc:'Park'
+};
+
 function show(html) {
   document.getElementById('app').innerHTML = html;
 }
 
 // ── VUE 1 : Accueil ──────────────────────────────────────────
-function renderWelcome() {
+async function renderWelcome() {
+  // Récupère les joueurs déjà connectés
+  let players = [];
+  try {
+    const res = await fetch(`${API}/players/current`);
+    if (res.ok) players = await res.json();
+  } catch(e) {}
+
+  const playersList = players.length > 0
+    ? players.map(p => `
+        <div class="player-joined">
+          <div class="player-avatar">${p.pseudo[0].toUpperCase()}</div>
+          <div class="player-info">
+            <div class="player-name">${p.pseudo}</div>
+            <div class="player-role">${getRoleName(p.role)}</div>
+          </div>
+          <span class="badge badge-green">✓</span>
+        </div>
+      `).join('')
+    : `<div style="text-align:center;color:#6b7280;font-size:13px;padding:1rem">No players yet...</div>`;
+
   show(`
-    <div class="badge badge-green">🟢 Jeu en cours</div>
+    <div class="badge badge-green">🟢 Game in progress</div>
     <h1>Belle<br>ville</h1>
-    <p>Application compagnon du jeu de plateau.<br>Scannez le QR code et rejoignez la partie.</p>
+    <p>Board game companion app.<br>Scan the QR code to join the game.</p>
+
+    <button class="btn btn-primary" onclick="showJoinForm()">+ New Player</button>
+
     <div class="sep"></div>
-    <label>Votre pseudo</label>
-    <input id="pseudo" type="text" placeholder="Ex: Marie" maxlength="16" />
-    <label>Votre numéro de joueur</label>
-    <select id="slot">
-      <option value="1">Joueur 1</option>
-      <option value="2">Joueur 2</option>
-      <option value="3">Joueur 3</option>
-      <option value="4">Joueur 4</option>
-    </select>
-    <div id="err" class="error" style="display:none">Pseudo trop court.</div>
-    <button class="btn btn-primary" onclick="goToRoles()">Suivant →</button>
+    <h3>Players joined (${players.length}/4)</h3>
+    <div id="players-list">${playersList}</div>
   `);
 }
 
-function goToRoles() {
+function getRoleName(roleId) {
+  const role = ROLES.find(r => r.id === roleId);
+  return role ? role.name : roleId;
+}
+
+function showJoinForm() {
+  show(`
+    <button class="back-btn" onclick="renderWelcome()">← Back</button>
+    <h2>Join the game</h2>
+    <label>Your nickname</label>
+    <input id="pseudo" type="text" placeholder="Ex: Marie" maxlength="16" />
+    <label>Your player number</label>
+    <select id="slot">
+      <option value="1">Player 1</option>
+      <option value="2">Player 2</option>
+      <option value="3">Player 3</option>
+      <option value="4">Player 4</option>
+    </select>
+    <div id="err" class="error" style="display:none">Nickname too short.</div>
+    <button class="btn btn-primary" onclick="spinWheel()">Join →</button>
+  `);
+}
+
+// ── VUE 2 : Roue des rôles ───────────────────────────────────
+async function spinWheel() {
   const pseudo = document.getElementById('pseudo').value.trim();
   const slot   = document.getElementById('slot').value;
+
   if (pseudo.length < 2) {
     document.getElementById('err').style.display = 'block';
     return;
   }
+
   state.pseudo      = pseudo;
   state.player_slot = parseInt(slot);
-  renderRoles();
-}
 
-// ── VUE 2 : Rôles ───────────────────────────────────────────
-function renderRoles() {
-  const cards = ROLES.map(r => `
-    <div class="role-card" id="role-${r.id}" onclick="selectRole('${r.id}')">
-      <div class="role-icon">${r.icon}</div>
-      <div class="role-name">${r.name}</div>
-      <div class="role-desc">${r.desc}</div>
-    </div>
-  `).join('');
+  // Récupère les rôles déjà pris
+  let takenRoles = [];
+  try {
+    const res = await fetch(`${API}/players/current`);
+    if (res.ok) {
+      const players = await res.json();
+      takenRoles = players.map(p => p.role);
+    }
+  } catch(e) {}
 
-  show(`
-    <button class="btn btn-secondary" onclick="renderWelcome()" style="margin-bottom:1rem">← Retour</button>
-    <h2>Choisissez votre rôle secret</h2>
-    <div class="role-grid">${cards}</div>
-    <div id="role-err" class="error" style="display:none">Choisissez un rôle.</div>
-    <button class="btn btn-primary" onclick="joinGame()">Rejoindre la partie →</button>
-  `);
-}
+  const availableRoles = ROLES.filter(r => !takenRoles.includes(r.id));
 
-function selectRole(id) {
-  document.querySelectorAll('.role-card').forEach(c => c.classList.remove('selected'));
-  document.getElementById(`role-${id}`).classList.add('selected');
-  state.role = id;
-}
-
-// ── VUE 3 : Lobby ───────────────────────────────────────────
-async function joinGame() {
-  if (!state.role) {
-    document.getElementById('role-err').style.display = 'block';
+  if (availableRoles.length === 0) {
+    alert('All roles are taken!');
     return;
   }
+
+  // Affiche le pop-up avec la roue
+  showWheelPopup(availableRoles);
+}
+
+function showWheelPopup(availableRoles) {
+  // Choisit le rôle aléatoirement
+  const chosenRole = availableRoles[Math.floor(Math.random() * availableRoles.length)];
+
+  show(`
+    <div class="wheel-popup">
+      <h2>Spinning the wheel...</h2>
+      <div class="wheel-container">
+        <div class="wheel" id="wheel">
+          ${availableRoles.map((r, i) => `
+            <div class="wheel-segment" style="--i:${i};--total:${availableRoles.length}">
+              <span>${r.icon}</span>
+            </div>
+          `).join('')}
+        </div>
+        <div class="wheel-arrow">▼</div>
+      </div>
+      <div class="wheel-result" id="wheel-result" style="display:none">
+        <div class="role-reveal">
+          <div class="role-icon-big">${chosenRole.icon}</div>
+          <div class="role-name-big">${chosenRole.name}</div>
+          <div class="role-desc-reveal">${chosenRole.desc}</div>
+        </div>
+        <p style="color:#9ca3af;font-size:13px;margin-top:1rem">This is your secret objective!</p>
+        <button class="btn btn-primary" onclick="joinWithRole('${chosenRole.id}')">Enter the city →</button>
+      </div>
+    </div>
+  `);
+
+  // Animation de la roue
+  const wheel = document.getElementById('wheel');
+  wheel.style.transition = 'transform 3s cubic-bezier(0.17, 0.67, 0.12, 0.99)';
+  wheel.style.transform  = `rotate(${720 + Math.random() * 360}deg)`;
+
+  setTimeout(() => {
+    document.getElementById('wheel-result').style.display = 'block';
+  }, 3200);
+}
+
+async function joinWithRole(roleId) {
+  state.role = roleId;
 
   const res = await fetch(`${API}/players/join`, {
     method: 'POST',
@@ -126,42 +200,45 @@ async function joinGame() {
   renderLobby(data.players);
 }
 
+// ── VUE 3 : Lobby ───────────────────────────────────────────
 function renderLobby(players) {
-  const rows = [1,2,3,4].map(slot => {
-    const p = players.find(p => p.slot === slot);
-    if (p) {
-      return `
-        <div class="player-row filled">
-          <div class="player-avatar">${p.pseudo[0].toUpperCase()}</div>
-          <div class="player-info">
-            <div class="player-name">${p.pseudo}</div>
-            <div class="player-role">${p.role}</div>
-          </div>
-          <span class="badge badge-green">✓</span>
-        </div>`;
-    }
-    return `
-      <div class="player-row empty">
-        <div class="player-avatar">?</div>
-        <div class="player-info">
-          <div class="player-name">Joueur ${slot}</div>
-          <div class="player-role">En attente…</div>
-        </div>
-      </div>`;
-  }).join('');
+  const cards = players.map(p => `
+    <div class="player-card">
+      <div class="player-avatar large">${p.pseudo[0].toUpperCase()}</div>
+      <div class="player-card-name">${p.pseudo}</div>
+      <div class="player-card-role">${getRoleName(p.role)}</div>
+      <span class="badge badge-green">Ready</span>
+    </div>
+  `).join('');
+
+  const emptySlots = 4 - players.length;
+  const empty = Array(emptySlots).fill(`
+    <div class="player-card empty">
+      <div class="player-avatar large">?</div>
+      <div class="player-card-name">Waiting...</div>
+      <div class="player-card-role">—</div>
+    </div>
+  `).join('');
 
   const canStart = players.length === 4;
 
   show(`
-    <div class="wait-center">
-      <div class="wait-count">${players.length}</div>
-      <div class="wait-label">/ 4 joueurs connectés</div>
+    <div class="lobby-header">
+      <h1>Belleville</h1>
+      <div class="lobby-count">${players.length}<span>/4</span></div>
     </div>
-    <div>${rows}</div>
+    <p>Waiting for all players to join...</p>
+
+    <div class="player-cards-grid">
+      ${cards}${empty}
+    </div>
+
     <div class="sep"></div>
+
     ${canStart
-      ? `<button class="btn btn-primary" onclick="startGame()">🌿 Lancer la partie !</button>`
-      : `<p style="text-align:center">En attente des autres joueurs…</p>`}
+      ? `<button class="btn btn-primary" onclick="startGame()">🌿 Start the game!</button>`
+      : `<div style="text-align:center;color:#6b7280;font-size:13px">Waiting for ${emptySlots} more player(s)...</div>`
+    }
   `);
 }
 
@@ -201,8 +278,8 @@ function renderGame(data) {
       <div class="building-row">
         <span class="b-icon">${BUILDING_ICONS[b.type] || '🏗'}</span>
         <div class="b-info">
-          <div class="b-name">${b.type}</div>
-          <div class="b-level">Niveau ${b.level}</div>
+          <div class="b-name">${BUILDING_NAMES[b.type] || b.type}</div>
+          <div class="b-level">Level ${b.level}</div>
         </div>
         <div class="b-pips">${pip0}${pip1}</div>
         ${canUp
@@ -223,7 +300,7 @@ function renderGame(data) {
         <div style="font-size:20px;font-weight:800">Belleville</div>
         <div style="font-size:12px;color:#9ca3af">${me?.pseudo} — ${me?.credits} cr</div>
       </div>
-      <span class="badge badge-blue">Année ${game.turn}</span>
+      <span class="badge badge-blue">Year ${game.turn}</span>
     </div>
 
     <div class="pollution-bar">
@@ -238,25 +315,25 @@ function renderGame(data) {
     </div>
 
     <div class="stats-grid">
-      <div class="stat-card"><div class="stat-label">💰 Vos crédits</div><div class="stat-val">${me?.credits}</div></div>
-      <div class="stat-card"><div class="stat-label">👥 Joueurs</div><div class="stat-val">${players.length}</div></div>
+      <div class="stat-card"><div class="stat-label">💰 Your credits</div><div class="stat-val">${me?.credits}</div></div>
+      <div class="stat-card"><div class="stat-label">👥 Players</div><div class="stat-val">${players.length}</div></div>
     </div>
 
-    <h3>Événement du tour</h3>
+    <h3>Event this turn</h3>
     <div class="event-card ${event.type}">
       <div class="event-title">${event.title}</div>
       <div class="event-desc">${event.desc}</div>
     </div>
 
-    <h3>Bâtiments</h3>
+    <h3>Buildings</h3>
     ${buildingRows}
 
     <div class="sep"></div>
-    <button class="btn btn-secondary" onclick="depollute()">🌱 Dépollution (3 cr → -1 pollution)</button>
-    <button class="btn btn-primary" onclick="endTurn()">Fin du tour →</button>
+    <button class="btn btn-secondary" onclick="depollute()">🌱 Depollution campaign (3 cr → -1 pollution)</button>
+    <button class="btn btn-primary" onclick="endTurn()">End turn →</button>
 
     <div class="sep"></div>
-    <h3>Journal</h3>
+    <h3>Game log</h3>
     <div>${logHtml}</div>
   `);
 }
@@ -281,7 +358,7 @@ async function depollute() {
   });
   const data = await res.json();
   if (!res.ok) return alert(data.error);
-  alert(`✅ Pollution réduite de ${data.reduction} case(s) !`);
+  alert(`✅ Pollution reduced by ${data.reduction} step(s)!`);
   loadGame();
 }
 
@@ -289,9 +366,9 @@ async function endTurn() {
   const res  = await fetch(`${API}/game/${state.game_id}/end-turn`, { method: 'POST' });
   const data = await res.json();
   if (data.lost) {
-    alert('💀 Défaite ! La pollution a atteint 20. La ville est perdue.');
+    alert('💀 Defeat! Pollution reached 20. The city is lost.');
   } else {
-    alert(`📊 Bilan — Demande : ${data.demand} | Vert : ${data.green} | Fossile : ${data.fossil_covers} | +${data.pollution_add} pollution`);
+    alert(`📊 Report — Demand: ${data.demand} | Green: ${data.green} | Fossil: ${data.fossil_covers} | +${data.pollution_add} pollution`);
   }
   socket.emit('game_update', { game_id: state.game_id });
   loadGame();
