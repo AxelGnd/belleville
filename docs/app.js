@@ -1,5 +1,6 @@
 const API = 'https://belleville-backend.onrender.com/api';
 const socket = io('https://belleville-backend.onrender.com');
+
 let state = {
   game_id: null,
   player_slot: null,
