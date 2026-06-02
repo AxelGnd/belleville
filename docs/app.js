@@ -93,7 +93,7 @@ async function refreshPlayersList() {
         <div class="player-avatar">${p.pseudo[0].toUpperCase()}</div>
         <div class="player-info">
           <div class="player-name">${p.pseudo}</div>
-          <div class="player-role">${getRoleIcon(p.role)} ${getRoleName(p.role)}</div>
+          <div class="player-role" style="color:#6b7280">Role hidden 🤫</div>
         </div>
         <span class="badge badge-green">✓</span>
       </div>
@@ -122,7 +122,6 @@ async function spinWheel() {
   }
   state.pseudo = pseudo;
 
-  // Récupère les rôles déjà pris
   let takenRoles = [];
   try {
     const res = await fetch(`${API}/players/current`);
@@ -139,35 +138,39 @@ async function spinWheel() {
     return;
   }
 
-  showWheelAnimation(availableRoles);
+  showWheelAnimation(availableRoles, takenRoles);
 }
 
-function showWheelAnimation(availableRoles) {
+function showWheelAnimation(availableRoles, takenRoles) {
+  const allRoles = ROLES;
   const chosenRole = availableRoles[Math.floor(Math.random() * availableRoles.length)];
-  const segmentAngle = 360 / availableRoles.length;
-  const totalSpins = 5;
-  const chosenIndex = availableRoles.findIndex(r => r.id === chosenRole.id);
+  const segmentAngle = 360 / allRoles.length;
+  const chosenIndex = allRoles.findIndex(r => r.id === chosenRole.id);
+  const totalSpins = 6;
   const finalAngle = totalSpins * 360 + (360 - chosenIndex * segmentAngle - segmentAngle / 2);
 
-  const segments = availableRoles.map((r, i) => {
-    const colors = ['#14532d','#1e3a5f','#450a0a','#3b1f6b','#1c2f1c','#2d1b00','#1a1a2e','#0d2137'];
-    const bg = colors[i % colors.length];
-    const rotation = i * segmentAngle;
+  // Génère la roue en SVG
+  const cx = 110, cy = 110, r = 100;
+  const segments = allRoles.map((role, i) => {
+    const startAngle = (i * segmentAngle - 90) * Math.PI / 180;
+    const endAngle   = ((i + 1) * segmentAngle - 90) * Math.PI / 180;
+    const x1 = cx + r * Math.cos(startAngle);
+    const y1 = cy + r * Math.sin(startAngle);
+    const x2 = cx + r * Math.cos(endAngle);
+    const y2 = cy + r * Math.sin(endAngle);
+    const midAngle = (startAngle + endAngle) / 2;
+    const tx = cx + (r * 0.65) * Math.cos(midAngle);
+    const ty = cy + (r * 0.65) * Math.sin(midAngle);
+    const isTaken = takenRoles.includes(role.id);
+    const colors = ['#14532d','#1e3a5f','#450a0a','#3b1f6b','#1c3d2f','#2d1b00','#1a1a2e','#0d2137'];
+    const fill = isTaken ? '#2a2a2a' : colors[i % colors.length];
+    const stroke = isTaken ? '#444' : '#22c55e';
+
     return `
-      <div class="segment" style="
-        position:absolute;
-        width:100%;
-        height:100%;
-        clip-path:polygon(50% 50%, 50% 0%, ${50 + 50 * Math.tan((segmentAngle * Math.PI)/360)}% 0%);
-        background:${bg};
-        transform:rotate(${rotation}deg);
-        transform-origin:50% 50%;
-        display:flex;
-        align-items:flex-start;
-        justify-content:center;
-        padding-top:12px;
-        font-size:20px;
-      ">${r.icon}</div>
+      <path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z"
+            fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>
+      <text x="${tx}" y="${ty}" text-anchor="middle" dominant-baseline="middle"
+            font-size="16" opacity="${isTaken ? 0.3 : 1}">${role.icon}</text>
     `;
   }).join('');
 
@@ -176,30 +179,32 @@ function showWheelAnimation(availableRoles) {
       <h2>Spinning your role...</h2>
       <div class="wheel-outer">
         <div class="wheel-pointer">▼</div>
-        <div class="wheel-circle" id="wheel" style="transform:rotate(0deg)">
-          ${segments}
+        <div id="wheel-wrapper" style="transform:rotate(0deg);transition:none;width:220px;height:220px;border-radius:50%;overflow:hidden;border:3px solid #22c55e;">
+          <svg width="220" height="220" viewBox="0 0 220 220">
+            ${segments}
+            <circle cx="110" cy="110" r="18" fill="#0f1923" stroke="#22c55e" stroke-width="2"/>
+          </svg>
         </div>
       </div>
-      <div id="wheel-result" style="display:none;margin-top:1.5rem;animation:fadeIn .5s ease">
+      <div id="wheel-result" style="display:none;animation:fadeIn .5s ease">
         <div class="role-reveal">
           <div class="role-icon-big" id="result-icon"></div>
           <div class="role-name-big" id="result-name"></div>
           <div class="role-desc-reveal" id="result-desc"></div>
         </div>
-        <p style="color:#9ca3af;font-size:13px;margin:1rem 0">This is your secret objective — keep it to yourself!</p>
+        <p style="color:#9ca3af;font-size:13px;margin:1rem 0">🤫 Keep your role secret!</p>
         <button class="btn btn-primary" id="enter-btn">Enter the city →</button>
       </div>
     </div>
   `);
 
-  // Lance l'animation
   setTimeout(() => {
-    const wheel = document.getElementById('wheel');
+    const wheel = document.getElementById('wheel-wrapper');
+    if (!wheel) return;
     wheel.style.transition = 'transform 4s cubic-bezier(0.25, 0.1, 0.25, 1)';
     wheel.style.transform  = `rotate(${finalAngle}deg)`;
   }, 100);
 
-  // Affiche le résultat après l'animation
   setTimeout(() => {
     const resultEl = document.getElementById('wheel-result');
     if (!resultEl) return;
@@ -208,7 +213,7 @@ function showWheelAnimation(availableRoles) {
     document.getElementById('result-desc').textContent = chosenRole.desc;
     resultEl.style.display = 'block';
     document.getElementById('enter-btn').onclick = () => joinWithRole(chosenRole.id);
-  }, 4200);
+  }, 4300);
 }
 
 async function joinWithRole(roleId) {
@@ -239,11 +244,12 @@ function renderLobby(players) {
   const cards = [1,2,3,4].map(slot => {
     const p = players.find(p => p.slot === slot);
     if (p) {
+      const isMe = p.pseudo === state.pseudo;
       return `
         <div class="player-card">
           <div class="player-avatar large">${p.pseudo[0].toUpperCase()}</div>
           <div class="player-card-name">${p.pseudo}</div>
-          <div class="player-card-role">${getRoleIcon(p.role)} ${getRoleName(p.role)}</div>
+          <div class="player-card-role">${isMe ? '🤫 Your role is secret' : 'Role hidden 🤫'}</div>
           <span class="badge badge-green">Ready ✓</span>
         </div>`;
     }
@@ -271,26 +277,17 @@ function renderLobby(players) {
     }
   `);
 
-  // Polling pour mettre à jour le lobby
   pollingInterval = setInterval(async () => {
     try {
       const res = await fetch(`${API}/players/current`);
       if (res.ok) {
         const updatedPlayers = await res.json();
-        renderLobby(updatedPlayers);
+        if (updatedPlayers.length !== players.length) {
+          renderLobby(updatedPlayers);
+        }
       }
     } catch(e) {}
   }, 3000);
-}
-
-socket.on('lobby_update', ({ players }) => renderLobby(players));
-
-// ── VUE 4 : Jeu ─────────────────────────────────────────────
-async function startGame() {
-  stopPolling();
-  await fetch(`${API}/game/${state.game_id}/start`, { method: 'POST' });
-  socket.emit('game_update', { game_id: state.game_id });
-  loadGame();
 }
 
 async function loadGame() {
