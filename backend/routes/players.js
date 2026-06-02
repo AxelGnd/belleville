@@ -3,11 +3,11 @@ const router = express.Router();
 const db = require('../db/connection');
 
 router.post('/join', async (req, res) => {
-  const { pseudo, slot, role } = req.body;
+  const { pseudo, role } = req.body;
 
   try {
     let result = await db.query(
-      "SELECT * FROM games WHERE status='waiting' LIMIT 1"
+      "SELECT * FROM games WHERE status='waiting' ORDER BY id DESC LIMIT 1"
     );
 
     let game_id;
@@ -31,12 +31,23 @@ router.post('/join', async (req, res) => {
       game_id = result.rows[0].id;
     }
 
-    const existing = await db.query(
-      "SELECT * FROM players WHERE game_id=$1 AND slot=$2",
-      [game_id, slot]
+    // Trouve le premier slot libre automatiquement
+    const taken = await db.query(
+      "SELECT slot FROM players WHERE game_id=$1", [game_id]
     );
-    if (existing.rows.length > 0) {
-      return res.status(409).json({ error: 'Slot déjà pris' });
+    const takenSlots = taken.rows.map(r => r.slot);
+    const slot = [1,2,3,4].find(s => !takenSlots.includes(s));
+
+    if (!slot) {
+      return res.status(409).json({ error: 'Game is full' });
+    }
+
+    // Vérifie que le rôle n'est pas déjà pris
+    const roleCheck = await db.query(
+      "SELECT * FROM players WHERE game_id=$1 AND role=$2", [game_id, role]
+    );
+    if (roleCheck.rows.length > 0) {
+      return res.status(409).json({ error: 'Role already taken' });
     }
 
     await db.query(
@@ -45,24 +56,15 @@ router.post('/join', async (req, res) => {
     );
 
     const players = await db.query(
-      "SELECT * FROM players WHERE game_id=$1",
-      [game_id]
+      "SELECT * FROM players WHERE game_id=$1", [game_id]
     );
 
     res.json({ game_id, players: players.rows });
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Erreur serveur' });
+    res.status(500).json({ error: 'Server error' });
   }
-});
-
-router.get('/:game_id', async (req, res) => {
-  const players = await db.query(
-    "SELECT * FROM players WHERE game_id=$1",
-    [req.params.game_id]
-  );
-  res.json(players.rows);
 });
 router.get('/current', async (req, res) => {
   try {
