@@ -161,16 +161,14 @@ function showWheelAnimation(availableRoles, takenRoles) {
     const midAngle = (startAngle + endAngle) / 2;
     const tx = cx + (r * 0.65) * Math.cos(midAngle);
     const ty = cy + (r * 0.65) * Math.sin(midAngle);
-    const isTaken = takenRoles.includes(role.id);
     const colors = ['#14532d','#1e3a5f','#450a0a','#3b1f6b','#1c3d2f','#2d1b00','#1a1a2e','#0d2137'];
-    const fill = isTaken ? '#2a2a2a' : colors[i % colors.length];
-    const stroke = isTaken ? '#444' : '#22c55e';
+    const fill = colors[i % colors.length];
+    const stroke = '#22c55e';
 
     return `
       <path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z"
             fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>
-      <text x="${tx}" y="${ty}" text-anchor="middle" dominant-baseline="middle"
-            font-size="16" opacity="${isTaken ? 0.3 : 1}">${role.icon}</text>
+      
     `;
   }).join('');
 
