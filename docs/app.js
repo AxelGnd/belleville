@@ -149,8 +149,9 @@ function showWheelAnimation(availableRoles, takenRoles) {
   const totalSpins = 6;
   const finalAngle = totalSpins * 360 + (360 - chosenIndex * segmentAngle - segmentAngle / 2);
 
-  // Génère la roue en SVG
   const cx = 110, cy = 110, r = 100;
+  const colors = ['#14532d','#1e3a5f','#6b1a1a','#3b1f6b','#0d4a3a','#5a3200','#1a2a4a','#2d4a1a'];
+
   const segments = allRoles.map((role, i) => {
     const startAngle = (i * segmentAngle - 90) * Math.PI / 180;
     const endAngle   = ((i + 1) * segmentAngle - 90) * Math.PI / 180;
@@ -158,17 +159,20 @@ function showWheelAnimation(availableRoles, takenRoles) {
     const y1 = cy + r * Math.sin(startAngle);
     const x2 = cx + r * Math.cos(endAngle);
     const y2 = cy + r * Math.sin(endAngle);
+
+    // Centre de l'icône au milieu du segment
     const midAngle = (startAngle + endAngle) / 2;
-    const tx = cx + (r * 0.65) * Math.cos(midAngle);
-    const ty = cy + (r * 0.65) * Math.sin(midAngle);
-    const colors = ['#14532d','#1e3a5f','#450a0a','#3b1f6b','#1c3d2f','#2d1b00','#1a1a2e','#0d2137'];
-    const fill = colors[i % colors.length];
-    const stroke = '#22c55e';
+    const tx = cx + (r * 0.62) * Math.cos(midAngle);
+    const ty = cy + (r * 0.62) * Math.sin(midAngle);
 
     return `
       <path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z"
-            fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>
-      
+            fill="${colors[i % colors.length]}"
+            stroke="#0f1923" stroke-width="2"/>
+      <text x="${tx}" y="${ty}"
+            text-anchor="middle"
+            dominant-baseline="central"
+            font-size="18">${role.icon}</text>
     `;
   }).join('');
 
@@ -177,10 +181,19 @@ function showWheelAnimation(availableRoles, takenRoles) {
       <h2>Spinning your role...</h2>
       <div class="wheel-outer">
         <div class="wheel-pointer">▼</div>
-        <div id="wheel-wrapper" style="transform:rotate(0deg);transition:none;width:220px;height:220px;border-radius:50%;overflow:hidden;border:3px solid #22c55e;">
-          <svg width="220" height="220" viewBox="0 0 220 220">
+        <div id="wheel-wrapper" style="
+          transform: rotate(0deg);
+          transition: none;
+          width: 220px;
+          height: 220px;
+          border-radius: 50%;
+          overflow: hidden;
+          border: 3px solid #22c55e;
+          box-shadow: 0 0 20px #22c55e44;
+        ">
+          <svg width="220" height="220" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg">
             ${segments}
-            <circle cx="110" cy="110" r="18" fill="#0f1923" stroke="#22c55e" stroke-width="2"/>
+            <circle cx="110" cy="110" r="14" fill="#0f1923" stroke="#22c55e" stroke-width="2"/>
           </svg>
         </div>
       </div>
@@ -213,7 +226,6 @@ function showWheelAnimation(availableRoles, takenRoles) {
     document.getElementById('enter-btn').onclick = () => joinWithRole(chosenRole.id);
   }, 4300);
 }
-
 async function joinWithRole(roleId) {
   state.role = roleId;
 
