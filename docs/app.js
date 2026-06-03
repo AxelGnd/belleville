@@ -352,6 +352,10 @@ function pollColor(p) {
 function renderGame(data) {
   const { game, players, buildings, logs } = data;
   const me = players.find(p => p.slot === state.player_slot);
+  
+  // ✅ Déclare myRole ICI, avant le template
+  const myRole = ROLES.find(r => r.id === state.role);
+  
   const pct   = (game.pollution / 20) * 100;
   const color = pollColor(game.pollution);
 
