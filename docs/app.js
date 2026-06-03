@@ -272,6 +272,7 @@ function renderLobby(players) {
   }).join('');
 
   const canStart = players.length === 4;
+  const isHost   = players[0]?.pseudo === state.pseudo;
 
   show(`
     <div class="lobby-header">
@@ -281,23 +282,39 @@ function renderLobby(players) {
     <p>Waiting for all players to join...</p>
     <div class="player-cards-grid">${cards}</div>
     <div class="sep"></div>
-    ${canStart
+    ${canStart && isHost
       ? `<button class="btn btn-primary" onclick="startGame()">🌿 Start the game!</button>`
+      : canStart
+      ? `<div style="text-align:center;color:#9ca3af;font-size:13px">Waiting for host to start...</div>`
       : `<div style="text-align:center;color:#6b7280;font-size:13px">Waiting for ${4 - players.length} more player(s)...</div>`
     }
   `);
 
+  // Polling — vérifie si la partie a démarré
   pollingInterval = setInterval(async () => {
     try {
       const res = await fetch(`${API}/players/current`);
-      if (res.ok) {
-        const updatedPlayers = await res.json();
-        if (updatedPlayers.length !== players.length) {
-          renderLobby(updatedPlayers);
+      if (!res.ok) return;
+      const updatedPlayers = await res.json();
+
+      // Vérifie le statut de la partie
+      if (state.game_id) {
+        const gameRes = await fetch(`${API}/game/${state.game_id}/state`);
+        if (gameRes.ok) {
+          const gameData = await gameRes.json();
+          if (gameData.game?.status === 'playing') {
+            stopPolling();
+            renderGame(gameData);
+            return;
+          }
         }
       }
+
+      if (updatedPlayers.length !== players.length) {
+        renderLobby(updatedPlayers);
+      }
     } catch(e) {}
-  }, 3000);
+  }, 2000);
 }
 
 async function loadGame() {
@@ -475,6 +492,19 @@ socket.on('state_update', () => loadGame());
 
 async function startGame() {
   stopPolling();
+
+  // Récupère le game_id si null
+  if (!state.game_id) {
+    const res = await fetch(`${API}/players/current`);
+    const players = await res.json();
+    if (players.length > 0) {
+      const gameRes = await fetch(`${API}/game/${players[0].game_id}/state`);
+      const gameData = await gameRes.json();
+      state.game_id = gameData.game.id;
+      state.player_slot = players.find(p => p.pseudo === state.pseudo)?.slot;
+    }
+  }
+
   await fetch(`${API}/game/${state.game_id}/start`, { method: 'POST' });
   socket.emit('game_update', { game_id: state.game_id });
   loadGame();

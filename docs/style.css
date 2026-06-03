@@ -304,16 +304,24 @@ select option { background: #1e2d3d; }
   width: 220px;
   height: 220px;
   margin: 1.5rem auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .wheel-pointer {
   position: absolute;
-  top: -20px;
+  top: -24px;
   left: 50%;
   transform: translateX(-50%);
   font-size: 28px;
   color: #22c55e;
   z-index: 10;
+}
+
+#wheel-wrapper {
+  display: block;
+  margin: 0 auto;
 }
 
 .wheel-circle {
