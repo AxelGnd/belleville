@@ -472,6 +472,7 @@ async function endTurn() {
 }
 
 socket.on('state_update', () => loadGame());
+
 async function startGame() {
   stopPolling();
   await fetch(`${API}/game/${state.game_id}/start`, { method: 'POST' });
