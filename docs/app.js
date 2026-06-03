@@ -472,5 +472,16 @@ async function endTurn() {
 }
 
 socket.on('state_update', () => loadGame());
+async function startGame() {
+  stopPolling();
+  await fetch(`${API}/game/${state.game_id}/start`, { method: 'POST' });
+  socket.emit('game_update', { game_id: state.game_id });
+  loadGame();
+}
 
+async function loadGame() {
+  const res  = await fetch(`${API}/game/${state.game_id}/state`);
+  const data = await res.json();
+  renderGame(data);
+}
 renderWelcome();
