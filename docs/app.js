@@ -35,7 +35,7 @@ const BUILDING_ICONS = {
 const BUILDING_NAMES = {
   hopital:'Hospital', ecole:'School', recherche:'Research Center',
   residentiel:'Residential', eolienne:'Wind Turbine', solaire:'Solar Panel',
-  parc:'Park', centrale_nucleaire:'Nuclear Plant'
+  parc:'Park', centrale_nucleaire:'Nuclear Power Plant'
 };
 
 function show(html) {
@@ -292,7 +292,7 @@ function renderLobby(players) {
   }).join('');
 
   const canStart = players.length === 4;
-  const isHost   = players[0]?.pseudo === state.pseudo;
+  
 
   show(`
     <div class="lobby-header">
@@ -302,12 +302,10 @@ function renderLobby(players) {
     <p>Waiting for all players to join...</p>
     <div class="player-cards-grid">${cards}</div>
     <div class="sep"></div>
-    ${canStart && isHost
-      ? `<button class="btn btn-primary" onclick="startGame()">🌿 Start the game!</button>`
-      : canStart
-      ? `<div style="text-align:center;color:#9ca3af;font-size:13px">Waiting for host to start...</div>`
-      : `<div style="text-align:center;color:#6b7280;font-size:13px">Waiting for ${4 - players.length} more player(s)...</div>`
-    }
+    ${canStart
+  ? `<button class="btn btn-primary" onclick="startGame()">🌿 Start the game!</button>`
+  : `<div style="text-align:center;color:#6b7280;font-size:13px">Waiting for ${4 - players.length} more player(s)...</div>`
+}
   `);
 
   // Polling — vérifie si la partie a démarré
