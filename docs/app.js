@@ -11,24 +11,31 @@ let state = {
 let pollingInterval = null;
 
 const ROLES = [
-  { id:'promoteur',    icon:'🏘', name:'The Promoter',     desc:'2 Residential Lv2' },
-  { id:'scientifique', icon:'🔬', name:'The Scientist',     desc:'Research + Hospital Lv2' },
-  { id:'ecologiste',   icon:'🌿', name:'The Ecologist',     desc:'4 Green + Pollution < 3' },
-  { id:'industriel',   icon:'🏭', name:'The Industrialist', desc:'Fossil Lv2 + Poll > 15' },
-  { id:'maire',        icon:'🏛', name:'The Mayor',         desc:'All public buildings Lv1+' },
-  { id:'banquier',     icon:'💰', name:'The Banker',        desc:'12 cr + Residential Lv2' },
-  { id:'urbaniste',    icon:'📐', name:'The Urbanist',      desc:'4 Residential + School Lv2' },
-  { id:'technocrate',  icon:'⚙️', name:'The Technocrat',    desc:'Research Lv2 + 3 Green' },
+  { id:'scientist',    icon:'🔬', name:'The Scientist',        desc:'Upgrade the Research Center and the Hospital to Level 2.' },
+  { id:'ecologist',    icon:'🌿', name:'The Ecologist',         desc:'4 Green Energy installations + Pollution Gauge below 3.' },
+  { id:'industrialist',icon:'🏭', name:'The Industrialist',     desc:'Upgrade the Fossil Plant to Level 2 + Pollution Gauge above 15.' },
+  { id:'mayor',        icon:'🏛', name:'The Mayor',             desc:'Hospital, School and Research Center all at least Level 1.' },
+  { id:'urbanist',     icon:'📐', name:'The Urbanist',          desc:'Build at least 3 Residential Buildings + School at Level 2.' },
+  { id:'head_doctor',  icon:'🏥', name:'The Head Doctor',       desc:'Hospital at Level 2 + Pollution Gauge below 5.' },
+  { id:'engineer',     icon:'⚙️', name:'The Engineer',          desc:'4 Green Energy installations + Fossil Plant dismantled.' },
+  { id:'banker',       icon:'💰', name:'The Banker',            desc:'Own 1 Level 2 Residential Building + hold 12 Credits.' },
+  { id:'activist',     icon:'✊', name:'The Activist',          desc:'Fossil Plant stays at Level 1 + Pollution Gauge reaches 0.' },
+  { id:'developer',    icon:'🏘', name:'The Property Developer',desc:'Own two Level 2 Residential Buildings.' },
+  { id:'technocrat',   icon:'💡', name:'The Technocrat',        desc:'Research Center Level 2 + 3 Green Energy + Fossil Plant at Level 1.' },
+  { id:'lobbyist',     icon:'🤝', name:'The Fossil Lobbyist',   desc:'Fossil Plant Level 2 + 2 Residential Buildings + Pollution between 10 and 15.' },
+  { id:'union_leader', icon:'👷', name:'The Union Leader',      desc:'Hospital and Fossil Power Plant both at Level 2.' },
+  { id:'visionary',    icon:'🔭', name:'The Visionary',         desc:'Research Center Level 2 + own 1 Level 2 Residential + at least 1 Solar Panel or Wind Turbine.' },
 ];
-
 const BUILDING_ICONS = {
   hopital:'🏥', ecole:'🏫', recherche:'🔬',
-  residentiel:'🏘', eolienne:'💨', solaire:'☀️', parc:'🌳'
+  residentiel:'🏘', eolienne:'💨', solaire:'☀️',
+  parc:'🌳', centrale_nucleaire:'⚛️'
 };
 
 const BUILDING_NAMES = {
   hopital:'Hospital', ecole:'School', recherche:'Research Center',
-  residentiel:'Residential', eolienne:'Wind Turbine', solaire:'Solar Panel', parc:'Park'
+  residentiel:'Residential', eolienne:'Wind Turbine', solaire:'Solar Panel',
+  parc:'Park', centrale_nucleaire:'Nuclear Plant'
 };
 
 function show(html) {
@@ -148,36 +155,28 @@ function showWheelAnimation(availableRoles, takenRoles) {
   const chosenIndex = allRoles.findIndex(r => r.id === chosenRole.id);
   const finalAngle = 6 * 360 + (360 - chosenIndex * segmentAngle - segmentAngle / 2);
 
-  const size = 260;
+  const size = 280;
   const cx = size / 2, cy = size / 2, r = size / 2;
-  const colors = ['#14532d','#1e3a5f','#6b1a1a','#3b1f6b','#0d4a3a','#5a3200','#1a2a4a','#2d4a1a'];
-
-  const segments = allRoles.map((role, i) => {
-    const startAngle = (i * segmentAngle - 90) * Math.PI / 180;
-    const endAngle   = ((i + 1) * segmentAngle - 90) * Math.PI / 180;
-    const x1 = cx + r * Math.cos(startAngle);
-    const y1 = cy + r * Math.sin(startAngle);
-    const x2 = cx + r * Math.cos(endAngle);
-    const y2 = cy + r * Math.sin(endAngle);
-    const midAngle = (startAngle + endAngle) / 2;
-    const tx = cx + (r * 0.68) * Math.cos(midAngle);
-    const ty = cy + (r * 0.68) * Math.sin(midAngle);
-    return `
-      <path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z"
-            fill="${colors[i % colors.length]}"
-            stroke="#0f1923" stroke-width="3"/>
-      <text x="${tx}" y="${ty}"
-            text-anchor="middle"
-            dominant-baseline="central"
-            font-size="22">${role.icon}</text>
-    `;
-  }).join('');
+  const colors = [
+    '#14532d','#1e3a5f','#6b1a1a','#3b1f6b',
+    '#0d4a3a','#5a3200','#1a2a4a','#2d4a1a',
+    '#4a1a3a','#1a3a4a','#3a2a0a','#2a1a4a',
+    '#1a4a2a','#4a2a1a'
+  ];
 
   show(`
-    <div style="text-align:center;padding:1rem 0">
-      <h2 style="margin-bottom:1.5rem">Spinning your role...</h2>
+    <div style="text-align:center;padding:2rem 0">
+      <h2 style="margin-bottom:2rem">Spinning your role...</h2>
       <div style="position:relative;display:inline-block">
-        <div style="position:absolute;top:-22px;left:50%;transform:translateX(-50%);font-size:26px;color:#22c55e;z-index:10">▼</div>
+        <div style="
+          position:absolute;
+          top:-26px;
+          left:50%;
+          transform:translateX(-50%);
+          font-size:28px;
+          color:#22c55e;
+          z-index:10;
+        ">▼</div>
         <div id="wheel-wrapper" style="
           width:${size}px;
           height:${size}px;
@@ -187,18 +186,28 @@ function showWheelAnimation(availableRoles, takenRoles) {
           transition:none;
         ">
           <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-            ${segments}
+            ${allRoles.map((role, i) => {
+              const startAngle = (i * segmentAngle - 90) * Math.PI / 180;
+              const endAngle   = ((i + 1) * segmentAngle - 90) * Math.PI / 180;
+              const x1 = cx + r * Math.cos(startAngle);
+              const y1 = cy + r * Math.sin(startAngle);
+              const x2 = cx + r * Math.cos(endAngle);
+              const y2 = cy + r * Math.sin(endAngle);
+              const midAngle = (startAngle + endAngle) / 2;
+              const tx = cx + (r * 0.68) * Math.cos(midAngle);
+              const ty = cy + (r * 0.68) * Math.sin(midAngle);
+              return `
+                <path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z"
+                      fill="${colors[i % colors.length]}"
+                      stroke="#0f1923" stroke-width="2"/>
+                <text x="${tx}" y="${ty}"
+                      text-anchor="middle"
+                      dominant-baseline="central"
+                      font-size="18">${role.icon}</text>
+              `;
+            }).join('')}
           </svg>
         </div>
-      </div>
-      <div id="wheel-result" style="display:none;margin-top:2rem;animation:fadeIn .5s ease">
-        <div class="role-reveal">
-          <div class="role-icon-big" id="result-icon"></div>
-          <div class="role-name-big" id="result-name"></div>
-          <div class="role-desc-reveal" id="result-desc"></div>
-        </div>
-        <p style="color:#9ca3af;font-size:13px;margin:1rem 0">🤫 Keep your role secret!</p>
-        <button class="btn btn-primary" id="enter-btn">Enter the city →</button>
       </div>
     </div>
   `);
@@ -210,15 +219,32 @@ function showWheelAnimation(availableRoles, takenRoles) {
     wheel.style.transform  = `rotate(${finalAngle}deg)`;
   }, 100);
 
+  // Après l'animation : efface tout et affiche uniquement le rôle
   setTimeout(() => {
-    const resultEl = document.getElementById('wheel-result');
-    if (!resultEl) return;
-    document.getElementById('result-icon').textContent = chosenRole.icon;
-    document.getElementById('result-name').textContent = chosenRole.name;
-    document.getElementById('result-desc').textContent = chosenRole.desc;
-    resultEl.style.display = 'block';
-    document.getElementById('enter-btn').onclick = () => joinWithRole(chosenRole.id);
-  }, 4300);
+    show(`
+      <div style="text-align:center;padding:3rem 1rem;animation:fadeIn .6s ease">
+        <div style="font-size:72px;margin-bottom:1.5rem">${chosenRole.icon}</div>
+        <div style="font-size:28px;font-weight:800;letter-spacing:-1px;margin-bottom:1rem">${chosenRole.name}</div>
+        <div style="
+          font-size:15px;
+          color:#9ca3af;
+          line-height:1.7;
+          max-width:300px;
+          margin:0 auto 2rem;
+        ">${chosenRole.desc}</div>
+        <div style="
+          background:#1e2d3d;
+          border:1px solid #22c55e44;
+          border-radius:10px;
+          padding:12px;
+          font-size:12px;
+          color:#6b7280;
+          margin-bottom:2rem;
+        ">🤫 Keep your role secret from other players!</div>
+        <button class="btn btn-primary" onclick="joinWithRole('${chosenRole.id}')">Enter the city →</button>
+      </div>
+    `);
+  }, 4500);
 }
 async function joinWithRole(roleId) {
   state.role = roleId;
@@ -374,16 +400,27 @@ function renderGame(data) {
 
   show(`
     <!-- Header -->
-    <div class="game-header">
-      <div>
-        <div class="game-title">Belleville</div>
-        <div class="game-sub">Year ${game.turn}</div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="icon-btn" onclick="showRolesList()" title="Roles list">📋</button>
-        <span class="badge badge-blue">Year ${game.turn}</span>
-      </div>
+  <div class="game-header">
+    <div>
+      <div class="game-title">Belleville</div>
+      <div class="game-sub">Year ${game.turn}</div>
     </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="icon-btn" onclick="showMyRole()" title="My role">🎭</button>
+      <button class="icon-btn" onclick="showRolesList()" title="Roles list">📋</button>
+    </div>
+  </div>
+
+  <!-- Mon rôle discret -->
+  ${myRole ? `
+    <div class="my-role-banner">
+      <span style="font-size:18px">${myRole.icon}</span>
+      <div>
+        <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Your role</div>
+        <div style="font-size:13px;font-weight:600">${myRole.name}</div>
+      </div>
+      <button class="icon-btn" onclick="showMyRole()" style="margin-left:auto;font-size:12px;padding:4px 8px">Details</button>
+    </div>` : ''}
 
     <!-- Pollution -->
     <div class="pollution-bar">
@@ -430,18 +467,18 @@ function renderGame(data) {
 function showRolesList() {
   const roleCards = ROLES.map(r => `
     <div class="role-info-card">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-        <span style="font-size:24px">${r.icon}</span>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <span style="font-size:28px">${r.icon}</span>
         <span style="font-size:15px;font-weight:700">${r.name}</span>
       </div>
-      <div style="font-size:13px;color:#9ca3af">${r.desc}</div>
+      <div style="font-size:13px;color:#9ca3af;line-height:1.6">${r.desc}</div>
     </div>
   `).join('');
 
   show(`
     <button class="back-btn" onclick="loadGame()">← Back to game</button>
     <h2>All roles & objectives</h2>
-    <p>Each player has a secret role. Complete your objective to win!</p>
+    <p>Complete your secret objective to win. Pollution reaching 20 means everyone loses!</p>
     ${roleCards}
   `);
 }
@@ -508,5 +545,29 @@ async function loadGame() {
   const res  = await fetch(`${API}/game/${state.game_id}/state`);
   const data = await res.json();
   renderGame(data);
+}
+
+function showMyRole() {
+  const me = { role: state.role };
+  const myRole = ROLES.find(r => r.id === state.role);
+  if (!myRole) return;
+
+  show(`
+    <button class="back-btn" onclick="loadGame()">← Back to game</button>
+    <div style="text-align:center;padding:2rem 0;animation:fadeIn .4s ease">
+      <div style="font-size:64px;margin-bottom:1rem">${myRole.icon}</div>
+      <div style="font-size:26px;font-weight:800;margin-bottom:1rem">${myRole.name}</div>
+      <div style="
+        font-size:14px;color:#9ca3af;
+        line-height:1.7;max-width:320px;
+        margin:0 auto 2rem;
+      ">${myRole.desc}</div>
+      <div style="
+        background:#14532d22;border:1px solid #22c55e44;
+        border-radius:10px;padding:12px;
+        font-size:12px;color:#22c55e;
+      ">🤫 Keep this secret from other players!</div>
+    </div>
+  `);
 }
 renderWelcome();
