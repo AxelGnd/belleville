@@ -567,3 +567,23 @@ select option { background: #1e2d3d; }
 .tier-label { font-size: 12px; font-weight: 700; color: #22c55e; }
 .tier-cost  { font-size: 12px; color: #9ca3af; }
 .tier-desc  { font-size: 13px; color: #d1d5db; line-height: 1.5; }
+
+.phase-banner {
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 1rem;
+  border: 1px solid;
+}
+.phase-banner.event   { background:#1c1917; border-color:#f59e0b44; }
+.phase-banner.actions { background:#14532d22; border-color:#22c55e44; }
+.phase-banner.bilan   { background:#1e3a5f22; border-color:#60a5fa44; }
+.phase-banner.waiting { background:#1e2d3d; border-color:#2d3f50; }
+.phase-label { font-size:14px; font-weight:700; margin-bottom:4px; }
+.phase-desc  { font-size:12px; color:#9ca3af; margin-bottom:12px; }
+
+.event-active {
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid;
+}

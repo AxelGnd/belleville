@@ -349,111 +349,139 @@ function pollColor(p) {
 
 function renderGame(data) {
   const { game, players, buildings, logs } = data;
-  const me = players.find(p => p.slot === state.player_slot);
-  
-  // ✅ Déclare myRole ICI, avant le template
   const myRole = ROLES.find(r => r.id === state.role);
-  
+  const me = players.find(p => p.slot === state.player_slot);
   const pct   = (game.pollution / 20) * 100;
   const color = pollColor(game.pollution);
+  const isMyTurn = game.current_player_slot === state.player_slot;
+  const event = game.current_event;
 
-  // Barre de progression mission (placeholder pour l'instant)
-  function missionProgress(role) {
-    return 0; // à connecter plus tard avec la vraie logique
-  }
+  // Joueur actif
+  const activePlayer = players.find(p => p.slot === game.current_player_slot);
 
+  // Players 2x2
   const playerBars = players.map(p => {
-  const isMe = p.slot === state.player_slot;
-  const initials = p.pseudo.substring(0, 2).toUpperCase();
-  return `
-    <div class="profile-bar-compact ${isMe ? 'me' : ''}">
-      <div class="profile-avatar">${initials}</div>
-      <div class="profile-info">
-        <div class="profile-name">${p.pseudo} ${isMe ? '<span class="you-tag">You</span>' : ''}</div>
-        <div class="profile-credits">💰 ${p.credits} cr</div>
-        <div class="mission-bar-track" style="margin-top:4px">
-          <div class="mission-bar-fill" style="width:${missionProgress(p.role)}%"></div>
+    const isMe = p.slot === state.player_slot;
+    const isActive = p.slot === game.current_player_slot;
+    const initials = p.pseudo.substring(0, 2).toUpperCase();
+    return `
+      <div class="profile-bar-compact ${isMe ? 'me' : ''}" style="${isActive && game.phase === 'actions' ? 'border-color:#f59e0b' : ''}">
+        <div class="profile-avatar">${initials}</div>
+        <div class="profile-info">
+          <div class="profile-name">
+            ${p.pseudo}
+            ${isMe ? '<span class="you-tag">You</span>' : ''}
+            ${isActive && game.phase === 'actions' ? '<span class="you-tag" style="background:#f59e0b">▶</span>' : ''}
+          </div>
+          <div class="profile-credits">💰 ${p.credits} cr</div>
+          <div class="mission-bar-track" style="margin-top:4px">
+            <div class="mission-bar-fill" style="width:0%"></div>
+          </div>
         </div>
       </div>
-    </div>
-  `;
-}).join('');
+    `;
+  }).join('');
 
-  // Bâtiments
-  const BUILDING_UPGRADES = {
-  hopital: [
-    { level: 1, cost: 4, desc: 'Reduces pollution by 1 each turn. Unlocks basic care.' },
-    { level: 2, cost: 7, desc: 'Reduces pollution by 2 each turn. Required for Head Doctor & Mayor objectives.' },
-  ],
-  ecole: [
-    { level: 1, cost: 3, desc: 'Generates 1 extra credit per turn for all players.' },
-    { level: 2, cost: 6, desc: 'Generates 2 extra credits. Required for Urbanist objective.' },
-  ],
-  recherche: [
-    { level: 1, cost: 4, desc: 'Unlocks advanced green energy upgrades.' },
-    { level: 2, cost: 8, desc: 'Required for Scientist, Technocrat & Visionary objectives.' },
-  ],
-  residentiel: [
-    { level: 1, cost: 3, desc: 'Provides housing. Owner earns 1 credit/turn.' },
-    { level: 2, cost: 6, desc: 'Owner earns 2 credits/turn. Required for Developer & Banker objectives.' },
-  ],
-  eolienne: [
-    { level: 1, cost: 4, desc: 'Green energy: covers 2 energy demand. Reduces pollution risk.' },
-    { level: 2, cost: 0, desc: 'Not upgradeable.' },
-  ],
-  solaire: [
-    { level: 1, cost: 3, desc: 'Green energy: covers 1 energy demand. Low cost option.' },
-    { level: 2, cost: 0, desc: 'Not upgradeable.' },
-  ],
-  parc: [
-    { level: 1, cost: 2, desc: 'Permanently reduces pollution gauge by 1.' },
-    { level: 2, cost: 0, desc: 'Not upgradeable.' },
-  ],
-  centrale_nucleaire: [
-    { level: 1, cost: 5, desc: 'Covers 4 energy demand but adds 2 pollution/turn.' },
-    { level: 2, cost: 9, desc: 'Covers 6 demand, adds 3 pollution/turn. Required for Union Leader & Industrialist.' },
-  ],
-};
+  // Buildings 3 colonnes
+  window._buildingsData = {};
+  window._playersData = players;
+  const buildingCards = buildings.map(b => {
+    window._buildingsData[b.id] = b;
+    const owner = b.owner_slot ? players.find(p => p.slot === b.owner_slot) : null;
+    const pip0 = `<div class="b-pip ${b.level >= 1 ? 'on' : ''}"></div>`;
+    const pip1 = `<div class="b-pip ${b.level >= 2 ? 'on' : ''}"></div>`;
+    return `
+      <div class="building-card" onclick="showBuildingModal(${b.id})">
+        <div class="b-icon">${BUILDING_ICONS[b.type] || '🏗'}</div>
+        <div class="b-name">${BUILDING_NAMES[b.type] || b.type}</div>
+        <div class="b-pips">${pip0}${pip1}</div>
+        ${owner ? `<div class="b-owner">${owner.pseudo}</div>` : '<div style="height:15px"></div>'}
+      </div>
+    `;
+  }).join('');
 
-const buildingCards = buildings.map(b => {
-  const owner = b.owner_slot ? players.find(p => p.slot === b.owner_slot) : null;
-  const pip0 = `<div class="b-pip ${b.level >= 1 ? 'on' : ''}"></div>`;
-  const pip1 = `<div class="b-pip ${b.level >= 2 ? 'on' : ''}"></div>`;
-  return `
-    <div class="building-card" onclick="showBuildingModal(${b.id}, ${JSON.stringify(b).replace(/"/g, '&quot;')}, ${JSON.stringify(players).replace(/"/g, '&quot;')})">
-      <div class="b-icon">${BUILDING_ICONS[b.type] || '🏗'}</div>
-      <div class="b-name">${BUILDING_NAMES[b.type] || b.type}</div>
-      <div class="b-pips">${pip0}${pip1}</div>
-      ${owner ? `<div class="b-owner">${owner.pseudo}</div>` : '<div style="height:15px"></div>'}
-    </div>
-  `;
-}).join('');
+  // Zone de phase
+  let phaseZone = '';
+
+  // ── Phase : EVENT ──────────────────────────────────────────
+  if (game.phase === 'event') {
+    phaseZone = `
+      <div class="phase-banner event">
+        <div class="phase-label">📅 Phase 1 — Événement</div>
+        <div class="phase-desc">Tirez la carte événement pour commencer le tour ${game.turn}.</div>
+        <button class="btn btn-primary" onclick="drawEvent()">🎴 Tirer la carte</button>
+      </div>
+    `;
+  }
+
+  // ── Phase : ACTIONS ────────────────────────────────────────
+  if (game.phase === 'actions') {
+    if (event) {
+      const typeColor = event.type === 'crisis' ? '#ef4444' : event.type === 'opportunity' ? '#22c55e' : '#f59e0b';
+      phaseZone += `
+        <div class="event-active" style="border-color:${typeColor}44;background:${typeColor}11">
+          <div style="font-size:11px;color:${typeColor};text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">${event.type}</div>
+          <div style="font-size:14px;font-weight:700;margin-bottom:4px">${event.title}</div>
+          <div style="font-size:12px;color:#9ca3af">${event.desc}</div>
+        </div>
+      `;
+    }
+
+    if (isMyTurn) {
+      phaseZone += `
+        <div class="phase-banner actions">
+          <div class="phase-label">⚡ C'est ton tour !</div>
+          <div class="phase-desc">Choisis une action ou passe ton tour.</div>
+          <div class="actions-zone">
+            <button class="btn btn-secondary" onclick="showBuildMenu()">🏗 Construire / Améliorer</button>
+            <button class="btn btn-secondary" onclick="doAction('depollute')">🌱 Dépollution (3 cr)</button>
+            <button class="btn btn-secondary" style="border-color:#6b7280;color:#9ca3af" onclick="doAction('pass')">⏭ Passer</button>
+          </div>
+        </div>
+      `;
+    } else {
+      phaseZone += `
+        <div class="phase-banner waiting">
+          <div class="phase-label">⏳ Tour de ${activePlayer?.pseudo || '...'}</div>
+          <div class="phase-desc">En attente de son action...</div>
+        </div>
+      `;
+    }
+  }
+
+  // ── Phase : BILAN ──────────────────────────────────────────
+  if (game.phase === 'bilan') {
+    phaseZone = `
+      <div class="phase-banner bilan">
+        <div class="phase-label">⚖️ Phase 3 — Bilan Environnemental</div>
+        <div class="phase-desc">Tous les joueurs ont joué. Calculez l'impact de la ville.</div>
+        <button class="btn btn-primary" onclick="endTurn()">📊 Lancer le bilan</button>
+      </div>
+    `;
+  }
 
   show(`
-    <!-- Header -->
-  <div class="game-header">
-    <div>
-      <div class="game-title">Belleville</div>
-      <div class="game-sub">Year ${game.turn}</div>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <button class="icon-btn" onclick="showMyRole()" title="My role">🎭</button>
-      <button class="icon-btn" onclick="showRolesList()" title="Roles list">📋</button>
-    </div>
-  </div>
-
-  <!-- Mon rôle discret -->
-  ${myRole ? `
-    <div class="my-role-banner">
-      <span style="font-size:18px">${myRole.icon}</span>
+    <div class="game-header">
       <div>
-        <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Your role</div>
-        <div style="font-size:13px;font-weight:600">${myRole.name}</div>
+        <div class="game-title">Belleville</div>
+        <div class="game-sub">Année ${game.turn} · ${phaseLabel(game.phase)}</div>
       </div>
-      <button class="icon-btn" onclick="showMyRole()" style="margin-left:auto;font-size:12px;padding:4px 8px">Details</button>
-    </div>` : ''}
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="icon-btn" onclick="showMyRole()">🎭</button>
+        <button class="icon-btn" onclick="showRolesList()">📋</button>
+      </div>
+    </div>
 
-    <!-- Pollution -->
+    ${myRole ? `
+      <div class="my-role-banner">
+        <span style="font-size:18px">${myRole.icon}</span>
+        <div>
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px">Ton rôle</div>
+          <div style="font-size:13px;font-weight:600">${myRole.name}</div>
+        </div>
+        <button class="icon-btn" onclick="showMyRole()" style="margin-left:auto;font-size:12px;padding:4px 8px">Détails</button>
+      </div>` : ''}
+
     <div class="pollution-bar">
       <div class="pbar-header">
         <span style="font-size:14px;font-weight:600">☁ Pollution</span>
@@ -467,31 +495,27 @@ const buildingCards = buildings.map(b => {
 
     <div class="sep"></div>
 
-    <!-- Profils joueurs -->
-    <h3>Players</h3>
+    <h3>Joueurs</h3>
     <div class="players-grid">${playerBars}</div>
 
     <div class="sep"></div>
 
-    <!-- Bâtiments -->
-    <h3>Buildings</h3>
+    ${phaseZone}
+
+    <div class="sep"></div>
+
+    <h3>Bâtiments</h3>
     <div class="buildings-grid">${buildingCards}</div>
 
     <div class="sep"></div>
 
-    <!-- Zone actions — à compléter plus tard -->
-    <h3>Your actions</h3>
-    <div class="actions-zone">
-      <button class="btn btn-secondary" onclick="depollute()">🌱 Depollution (3 cr)</button>
-      <button class="btn btn-primary" onclick="endTurn()">End turn →</button>
-    </div>
-
-    <div class="sep"></div>
-
-    <!-- Journal -->
-    <h3>Game log</h3>
+    <h3>Journal</h3>
     <div>${logs.map(l => `<div class="log-entry">• ${l.message}</div>`).join('')}</div>
   `);
+}
+
+function phaseLabel(phase) {
+  return { event:'Événement', actions:'Actions', bilan:'Bilan', waiting:'Attente' }[phase] || phase;
 }
 
 // ── Liste des rôles ──────────────────────────────────────────
@@ -538,14 +562,78 @@ async function depollute() {
   loadGame();
 }
 
+async function drawEvent() {
+  const res  = await fetch(`${API}/game/${state.game_id}/draw-event`, { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error);
+  socket.emit('game_update', { game_id: state.game_id });
+  loadGame();
+}
+
+async function doAction(action_type, building_id = null) {
+  const body = { player_slot: state.player_slot, action_type };
+  if (building_id) body.building_id = building_id;
+
+  const res  = await fetch(`${API}/game/${state.game_id}/action`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error);
+  socket.emit('game_update', { game_id: state.game_id });
+  loadGame();
+}
+
+function showBuildMenu() {
+  const buildings = Object.values(window._buildingsData || {});
+  const me = window._playersData?.find(p => p.slot === state.player_slot);
+
+  const rows = buildings.map(b => {
+    const costs = { hopital:[5,8], ecole:[5,8], recherche:[6,10], residentiel:[4,8], eolienne:[4,0], solaire:[4,0], parc:[13,20], centrale_nucleaire:[0,4] };
+    const cost = costs[b.type]?.[b.level];
+    const canBuild = cost && cost > 0 && b.level < 2;
+    const affordable = me && me.credits >= cost;
+    return `
+      <div class="building-row" style="opacity:${canBuild ? 1 : 0.4}">
+        <span class="b-icon">${BUILDING_ICONS[b.type] || '🏗'}</span>
+        <div class="b-info">
+          <div class="b-name">${BUILDING_NAMES[b.type]} Nv${b.level} → Nv${b.level + 1}</div>
+          <div class="b-meta">💰 ${cost ?? '—'} cr ${!affordable && canBuild ? '<span style="color:#ef4444">· insuffisant</span>' : ''}</div>
+        </div>
+        ${canBuild ? `<button class="btn btn-primary" style="width:auto;padding:6px 12px;margin:0;font-size:12px;${!affordable?'opacity:.4':''}" ${!affordable?'disabled':''} onclick="doAction('upgrade',${b.id});closeModal()">Améliorer</button>` : '<span style="font-size:11px;color:#6b7280">Max</span>'}
+      </div>
+    `;
+  }).join('');
+
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <h2 style="margin-bottom:1rem">Construire / Améliorer</h2>
+      ${rows}
+      <button class="btn btn-secondary" style="margin-top:1rem" onclick="closeModal()">Fermer</button>
+    </div>
+  `;
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+  document.body.appendChild(modal);
+  window._currentModal = modal;
+}
+
 async function endTurn() {
   const res  = await fetch(`${API}/game/${state.game_id}/end-turn`, { method: 'POST' });
   const data = await res.json();
+  if (!res.ok) return alert(data.error);
+
   if (data.lost) {
-    alert('💀 Defeat! Pollution reached 20. The city is lost.');
+    alert('💀 Défaite ! La pollution a atteint 20. La ville est perdue.');
   } else {
-    alert(`📊 Report — Demand: ${data.demand} | Green: ${data.green} | Fossil: ${data.fossil_covers} | +${data.pollution_add} pollution`);
+    let msg = `📊 Bilan — Demande: ${data.demand} | Vert: ${data.green} | Fossile: ${data.effective_fossil} | +${data.pollution_add} pollution`;
+    if (data.blackout) msg += `\n⚡ BLACKOUT ! Surcharge de ${data.blackout_excess} — des bâtiments redescendent de niveau.`;
+    alert(msg);
   }
+
   socket.emit('game_update', { game_id: state.game_id });
   loadGame();
 }
