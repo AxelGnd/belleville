@@ -363,42 +363,71 @@ function renderGame(data) {
   }
 
   const playerBars = players.map(p => {
-    const isMe = p.slot === state.player_slot;
-    const progress = missionProgress(p.role);
-    const initials = p.pseudo.substring(0,2).toUpperCase();
-    return `
-      <div class="profile-bar ${isMe ? 'me' : ''}">
-        <div class="profile-avatar">${initials}</div>
-        <div class="profile-info">
-          <div class="profile-name">${p.pseudo} ${isMe ? '<span class="you-tag">You</span>' : ''}</div>
-          <div class="profile-credits">💰 ${p.credits} cr</div>
-          <div class="mission-bar-track">
-            <div class="mission-bar-fill" style="width:${progress}%"></div>
-          </div>
+  const isMe = p.slot === state.player_slot;
+  const initials = p.pseudo.substring(0, 2).toUpperCase();
+  return `
+    <div class="profile-bar-compact ${isMe ? 'me' : ''}">
+      <div class="profile-avatar">${initials}</div>
+      <div class="profile-info">
+        <div class="profile-name">${p.pseudo} ${isMe ? '<span class="you-tag">You</span>' : ''}</div>
+        <div class="profile-credits">💰 ${p.credits} cr</div>
+        <div class="mission-bar-track" style="margin-top:4px">
+          <div class="mission-bar-fill" style="width:${missionProgress(p.role)}%"></div>
         </div>
       </div>
-    `;
-  }).join('');
+    </div>
+  `;
+}).join('');
 
   // Bâtiments
-  const buildingRows = buildings.map(b => {
-    const owner = b.owner_slot ? players.find(p => p.slot === b.owner_slot) : null;
-    const pip0  = `<div class="b-pip ${b.level >= 1 ? 'on' : ''}"></div>`;
-    const pip1  = `<div class="b-pip ${b.level >= 2 ? 'on' : ''}"></div>`;
-    return `
-      <div class="building-row">
-        <span class="b-icon">${BUILDING_ICONS[b.type] || '🏗'}</span>
-        <div class="b-info">
-          <div class="b-name">${BUILDING_NAMES[b.type] || b.type}</div>
-          <div class="b-meta">
-            Level ${b.level}
-            ${owner ? `· <span style="color:#22c55e">${owner.pseudo}</span>` : ''}
-          </div>
-        </div>
-        <div class="b-pips">${pip0}${pip1}</div>
-      </div>
-    `;
-  }).join('');
+  const BUILDING_UPGRADES = {
+  hopital: [
+    { level: 1, cost: 4, desc: 'Reduces pollution by 1 each turn. Unlocks basic care.' },
+    { level: 2, cost: 7, desc: 'Reduces pollution by 2 each turn. Required for Head Doctor & Mayor objectives.' },
+  ],
+  ecole: [
+    { level: 1, cost: 3, desc: 'Generates 1 extra credit per turn for all players.' },
+    { level: 2, cost: 6, desc: 'Generates 2 extra credits. Required for Urbanist objective.' },
+  ],
+  recherche: [
+    { level: 1, cost: 4, desc: 'Unlocks advanced green energy upgrades.' },
+    { level: 2, cost: 8, desc: 'Required for Scientist, Technocrat & Visionary objectives.' },
+  ],
+  residentiel: [
+    { level: 1, cost: 3, desc: 'Provides housing. Owner earns 1 credit/turn.' },
+    { level: 2, cost: 6, desc: 'Owner earns 2 credits/turn. Required for Developer & Banker objectives.' },
+  ],
+  eolienne: [
+    { level: 1, cost: 4, desc: 'Green energy: covers 2 energy demand. Reduces pollution risk.' },
+    { level: 2, cost: 0, desc: 'Not upgradeable.' },
+  ],
+  solaire: [
+    { level: 1, cost: 3, desc: 'Green energy: covers 1 energy demand. Low cost option.' },
+    { level: 2, cost: 0, desc: 'Not upgradeable.' },
+  ],
+  parc: [
+    { level: 1, cost: 2, desc: 'Permanently reduces pollution gauge by 1.' },
+    { level: 2, cost: 0, desc: 'Not upgradeable.' },
+  ],
+  centrale_nucleaire: [
+    { level: 1, cost: 5, desc: 'Covers 4 energy demand but adds 2 pollution/turn.' },
+    { level: 2, cost: 9, desc: 'Covers 6 demand, adds 3 pollution/turn. Required for Union Leader & Industrialist.' },
+  ],
+};
+
+const buildingCards = buildings.map(b => {
+  const owner = b.owner_slot ? players.find(p => p.slot === b.owner_slot) : null;
+  const pip0 = `<div class="b-pip ${b.level >= 1 ? 'on' : ''}"></div>`;
+  const pip1 = `<div class="b-pip ${b.level >= 2 ? 'on' : ''}"></div>`;
+  return `
+    <div class="building-card" onclick="showBuildingModal(${b.id}, ${JSON.stringify(b).replace(/"/g, '&quot;')}, ${JSON.stringify(players).replace(/"/g, '&quot;')})">
+      <div class="b-icon">${BUILDING_ICONS[b.type] || '🏗'}</div>
+      <div class="b-name">${BUILDING_NAMES[b.type] || b.type}</div>
+      <div class="b-pips">${pip0}${pip1}</div>
+      ${owner ? `<div class="b-owner">${owner.pseudo}</div>` : '<div style="height:15px"></div>'}
+    </div>
+  `;
+}).join('');
 
   show(`
     <!-- Header -->
@@ -440,13 +469,13 @@ function renderGame(data) {
 
     <!-- Profils joueurs -->
     <h3>Players</h3>
-    <div class="profiles-list">${playerBars}</div>
+    <div class="players-grid">${playerBars}</div>
 
     <div class="sep"></div>
 
     <!-- Bâtiments -->
     <h3>Buildings</h3>
-    <div class="buildings-list">${buildingRows}</div>
+    <div class="buildings-grid">${buildingCards}</div>
 
     <div class="sep"></div>
 
@@ -571,5 +600,56 @@ function showMyRole() {
       ">🤫 Keep this secret from other players!</div>
     </div>
   `);
+}
+function showBuildingModal(buildingId, building, players) {
+  const upgrades = BUILDING_UPGRADES[building.type] || [];
+  const owner = building.owner_slot ? players.find(p => p.slot === building.owner_slot) : null;
+
+  const tiers = upgrades.map(u => {
+    const isCurrent = building.level === u.level;
+    const isUnlocked = building.level >= u.level;
+    return `
+      <div class="upgrade-tier ${isCurrent ? 'current' : ''} ${!isUnlocked ? 'locked' : ''}">
+        <div class="tier-header">
+          <span class="tier-label">Level ${u.level} ${isCurrent ? '← current' : ''}</span>
+          ${u.cost > 0 ? `<span class="tier-cost">💰 ${u.cost} cr</span>` : ''}
+        </div>
+        <div class="tier-desc">${u.desc}</div>
+      </div>
+    `;
+  }).join('');
+
+  const canUpgrade = building.level < 2 && upgrades[building.level]?.cost > 0;
+
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:1.25rem">
+        <span style="font-size:36px">${BUILDING_ICONS[building.type] || '🏗'}</span>
+        <div>
+          <div style="font-size:18px;font-weight:700">${BUILDING_NAMES[building.type] || building.type}</div>
+          ${owner ? `<div style="font-size:12px;color:#22c55e">Owned by ${owner.pseudo}</div>` : '<div style="font-size:12px;color:#6b7280">No owner</div>'}
+        </div>
+      </div>
+      ${tiers}
+      <div style="display:flex;gap:8px;margin-top:1rem">
+        ${canUpgrade ? `<button class="btn btn-primary" style="margin:0" onclick="upgrade(${buildingId});closeModal()">Upgrade → ${upgrades[building.level].cost} cr</button>` : ''}
+        <button class="btn btn-secondary" style="margin:0;${canUpgrade ? '' : 'width:100%'}" onclick="closeModal()">Close</button>
+      </div>
+    </div>
+  `;
+
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+  document.body.appendChild(modal);
+  window._currentModal = modal;
+}
+
+function closeModal() {
+  if (window._currentModal) {
+    window._currentModal.remove();
+    window._currentModal = null;
+  }
 }
 renderWelcome();
