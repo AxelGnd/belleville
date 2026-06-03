@@ -344,3 +344,99 @@ select option { background: #1e2d3d; }
   from { opacity:0; transform:translateY(10px); }
   to   { opacity:1; transform:translateY(0); }
 }
+/* Game header */
+.game-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+.game-title { font-size: 22px; font-weight: 800; letter-spacing: -1px; }
+.game-sub   { font-size: 12px; color: #9ca3af; }
+
+.icon-btn {
+  background: #1e2d3d;
+  border: 1px solid #2d3f50;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+/* Profils */
+.profiles-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 0.5rem; }
+
+.profile-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #1e2d3d;
+  border: 1px solid #2d3f50;
+  border-radius: 10px;
+}
+
+.profile-bar.me {
+  border-color: #22c55e;
+  background: #14532d22;
+}
+
+.profile-avatar {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: #2d3f50;
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 14px;
+  flex-shrink: 0;
+}
+
+.profile-bar.me .profile-avatar {
+  background: #22c55e22;
+  color: #22c55e;
+}
+
+.profile-info { flex: 1; }
+.profile-name { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+.profile-credits { font-size: 12px; color: #9ca3af; margin-bottom: 4px; }
+
+.you-tag {
+  font-size: 10px;
+  background: #22c55e;
+  color: #0f1923;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+.mission-bar-track {
+  height: 4px;
+  background: #2d3f50;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.mission-bar-fill {
+  height: 100%;
+  background: #22c55e;
+  border-radius: 2px;
+  transition: width .5s;
+}
+
+/* Bâtiments */
+.buildings-list { display: flex; flex-direction: column; gap: 6px; }
+
+.b-meta { font-size: 11px; color: #9ca3af; }
+
+/* Actions zone */
+.actions-zone { display: flex; flex-direction: column; gap: 8px; }
+
+/* Roles list */
+.role-info-card {
+  padding: 14px;
+  background: #1e2d3d;
+  border: 1px solid #2d3f50;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}

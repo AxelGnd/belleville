@@ -318,58 +318,120 @@ function renderGame(data) {
   const pct   = (game.pollution / 20) * 100;
   const color = pollColor(game.pollution);
 
+  // Barre de progression mission (placeholder pour l'instant)
+  function missionProgress(role) {
+    return 0; // à connecter plus tard avec la vraie logique
+  }
+
+  const playerBars = players.map(p => {
+    const isMe = p.slot === state.player_slot;
+    const progress = missionProgress(p.role);
+    const initials = p.pseudo.substring(0,2).toUpperCase();
+    return `
+      <div class="profile-bar ${isMe ? 'me' : ''}">
+        <div class="profile-avatar">${initials}</div>
+        <div class="profile-info">
+          <div class="profile-name">${p.pseudo} ${isMe ? '<span class="you-tag">You</span>' : ''}</div>
+          <div class="profile-credits">💰 ${p.credits} cr</div>
+          <div class="mission-bar-track">
+            <div class="mission-bar-fill" style="width:${progress}%"></div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Bâtiments
   const buildingRows = buildings.map(b => {
+    const owner = b.owner_slot ? players.find(p => p.slot === b.owner_slot) : null;
     const pip0  = `<div class="b-pip ${b.level >= 1 ? 'on' : ''}"></div>`;
     const pip1  = `<div class="b-pip ${b.level >= 2 ? 'on' : ''}"></div>`;
-    const canUp = b.level < 2;
     return `
       <div class="building-row">
         <span class="b-icon">${BUILDING_ICONS[b.type] || '🏗'}</span>
         <div class="b-info">
           <div class="b-name">${BUILDING_NAMES[b.type] || b.type}</div>
-          <div class="b-level">Level ${b.level}</div>
+          <div class="b-meta">
+            Level ${b.level}
+            ${owner ? `· <span style="color:#22c55e">${owner.pseudo}</span>` : ''}
+          </div>
         </div>
         <div class="b-pips">${pip0}${pip1}</div>
-        ${canUp
-          ? `<button class="btn btn-secondary" style="width:auto;padding:6px 10px;font-size:12px;margin:0" onclick="upgrade(${b.id})">+</button>`
-          : `<span style="font-size:18px">✅</span>`}
-      </div>`;
+      </div>
+    `;
   }).join('');
 
-  const logHtml = logs.map(l =>
-    `<div class="log-entry">• ${l.message}</div>`
-  ).join('');
-
   show(`
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+    <!-- Header -->
+    <div class="game-header">
       <div>
-        <div style="font-size:20px;font-weight:800">Belleville</div>
-        <div style="font-size:12px;color:#9ca3af">${me?.pseudo} — ${me?.credits} cr</div>
+        <div class="game-title">Belleville</div>
+        <div class="game-sub">Year ${game.turn}</div>
       </div>
-      <span class="badge badge-blue">Year ${game.turn}</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="icon-btn" onclick="showRolesList()" title="Roles list">📋</button>
+        <span class="badge badge-blue">Year ${game.turn}</span>
+      </div>
     </div>
+
+    <!-- Pollution -->
     <div class="pollution-bar">
       <div class="pbar-header">
         <span style="font-size:14px;font-weight:600">☁ Pollution</span>
-        <span class="pbar-val" style="color:${color}">${game.pollution}</span>
+        <span class="pbar-val" style="color:${color}">${game.pollution} / 20</span>
       </div>
       <div class="pbar-track">
         <div class="pbar-fill" style="width:${pct}%;background:${color}"></div>
       </div>
       <div class="pbar-legend"><span>0</span><span>⚠ 15</span><span>💀 20</span></div>
     </div>
-    <div class="stats-grid">
-      <div class="stat-card"><div class="stat-label">💰 Your credits</div><div class="stat-val">${me?.credits}</div></div>
-      <div class="stat-card"><div class="stat-label">👥 Players</div><div class="stat-val">${players.length}</div></div>
-    </div>
+
+    <div class="sep"></div>
+
+    <!-- Profils joueurs -->
+    <h3>Players</h3>
+    <div class="profiles-list">${playerBars}</div>
+
+    <div class="sep"></div>
+
+    <!-- Bâtiments -->
     <h3>Buildings</h3>
-    ${buildingRows}
+    <div class="buildings-list">${buildingRows}</div>
+
     <div class="sep"></div>
-    <button class="btn btn-secondary" onclick="depollute()">🌱 Depollution (3 cr → -1 pollution)</button>
-    <button class="btn btn-primary" onclick="endTurn()">End turn →</button>
+
+    <!-- Zone actions — à compléter plus tard -->
+    <h3>Your actions</h3>
+    <div class="actions-zone">
+      <button class="btn btn-secondary" onclick="depollute()">🌱 Depollution (3 cr)</button>
+      <button class="btn btn-primary" onclick="endTurn()">End turn →</button>
+    </div>
+
     <div class="sep"></div>
+
+    <!-- Journal -->
     <h3>Game log</h3>
-    <div>${logHtml}</div>
+    <div>${logs.map(l => `<div class="log-entry">• ${l.message}</div>`).join('')}</div>
+  `);
+}
+
+// ── Liste des rôles ──────────────────────────────────────────
+function showRolesList() {
+  const roleCards = ROLES.map(r => `
+    <div class="role-info-card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <span style="font-size:24px">${r.icon}</span>
+        <span style="font-size:15px;font-weight:700">${r.name}</span>
+      </div>
+      <div style="font-size:13px;color:#9ca3af">${r.desc}</div>
+    </div>
+  `).join('');
+
+  show(`
+    <button class="back-btn" onclick="loadGame()">← Back to game</button>
+    <h2>All roles & objectives</h2>
+    <p>Each player has a secret role. Complete your objective to win!</p>
+    ${roleCards}
   `);
 }
 
