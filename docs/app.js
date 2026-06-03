@@ -146,10 +146,10 @@ function showWheelAnimation(availableRoles, takenRoles) {
   const chosenRole = availableRoles[Math.floor(Math.random() * availableRoles.length)];
   const segmentAngle = 360 / allRoles.length;
   const chosenIndex = allRoles.findIndex(r => r.id === chosenRole.id);
-  const totalSpins = 6;
-  const finalAngle = totalSpins * 360 + (360 - chosenIndex * segmentAngle - segmentAngle / 2);
+  const finalAngle = 6 * 360 + (360 - chosenIndex * segmentAngle - segmentAngle / 2);
 
-  const cx = 110, cy = 110, r = 100;
+  const size = 260;
+  const cx = size / 2, cy = size / 2, r = size / 2;
   const colors = ['#14532d','#1e3a5f','#6b1a1a','#3b1f6b','#0d4a3a','#5a3200','#1a2a4a','#2d4a1a'];
 
   const segments = allRoles.map((role, i) => {
@@ -159,45 +159,39 @@ function showWheelAnimation(availableRoles, takenRoles) {
     const y1 = cy + r * Math.sin(startAngle);
     const x2 = cx + r * Math.cos(endAngle);
     const y2 = cy + r * Math.sin(endAngle);
-
-    // Centre de l'icône au milieu du segment
     const midAngle = (startAngle + endAngle) / 2;
-    const tx = cx + (r * 0.62) * Math.cos(midAngle);
-    const ty = cy + (r * 0.62) * Math.sin(midAngle);
-
+    const tx = cx + (r * 0.68) * Math.cos(midAngle);
+    const ty = cy + (r * 0.68) * Math.sin(midAngle);
     return `
       <path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z"
             fill="${colors[i % colors.length]}"
-            stroke="#0f1923" stroke-width="2"/>
+            stroke="#0f1923" stroke-width="3"/>
       <text x="${tx}" y="${ty}"
             text-anchor="middle"
             dominant-baseline="central"
-            font-size="18">${role.icon}</text>
+            font-size="22">${role.icon}</text>
     `;
   }).join('');
 
   show(`
-    <div class="wheel-popup">
-      <h2>Spinning your role...</h2>
-      <div class="wheel-outer">
-        <div class="wheel-pointer">▼</div>
+    <div style="text-align:center;padding:1rem 0">
+      <h2 style="margin-bottom:1.5rem">Spinning your role...</h2>
+      <div style="position:relative;display:inline-block">
+        <div style="position:absolute;top:-22px;left:50%;transform:translateX(-50%);font-size:26px;color:#22c55e;z-index:10">▼</div>
         <div id="wheel-wrapper" style="
-          transform: rotate(0deg);
-          transition: none;
-          width: 220px;
-          height: 220px;
-          border-radius: 50%;
-          overflow: hidden;
-          border: 3px solid #22c55e;
-          box-shadow: 0 0 20px #22c55e44;
+          width:${size}px;
+          height:${size}px;
+          border-radius:50%;
+          overflow:hidden;
+          transform:rotate(0deg);
+          transition:none;
         ">
-          <svg width="220" height="220" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg">
+          <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
             ${segments}
-            <circle cx="110" cy="110" r="14" fill="#0f1923" stroke="#22c55e" stroke-width="2"/>
           </svg>
         </div>
       </div>
-      <div id="wheel-result" style="display:none;animation:fadeIn .5s ease">
+      <div id="wheel-result" style="display:none;margin-top:2rem;animation:fadeIn .5s ease">
         <div class="role-reveal">
           <div class="role-icon-big" id="result-icon"></div>
           <div class="role-name-big" id="result-name"></div>
