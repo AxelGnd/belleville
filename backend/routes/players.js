@@ -84,4 +84,11 @@ router.get('/current', async (req, res) => {
     res.json([]);
   }
 });
+router.post('/reset', async (req, res) => {
+  await db.query("DELETE FROM players");
+  await db.query("DELETE FROM buildings");
+  await db.query("DELETE FROM game_log");
+  await db.query("UPDATE games SET status='waiting', phase='waiting', pollution=5, turn=1, current_event=NULL, current_player_slot=1");
+  res.json({ success: true });
+});
 module.exports = router;

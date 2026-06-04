@@ -689,25 +689,46 @@ async function endTurn() {
   const data = await res.json();
   if (!res.ok) return alert(data.error);
 
+  socket.emit('game_update', { game_id: state.game_id, bilan: data });
+  showBilanResult(data);
+}
 
+function showBilanResult(data) {
   if (data.winners && data.winners.length > 0) {
     showEndScreen(true, data.winners);
     return;
   }
-
   if (data.lost) {
-    alert('💀 Défaite ! La pollution a atteint 20. La ville est perdue.');
-  } else {
-    let msg = `📊 Bilan — Demande: ${data.demand} | Vert: ${data.green} | Fossile: ${data.effective_fossil} | +${data.pollution_add} pollution`;
-    if (data.blackout) msg += `\n⚡ BLACKOUT ! Surcharge de ${data.blackout_excess} — des bâtiments redescendent de niveau.`;
-    alert(msg);
+    showEndScreen(false, []);
+    return;
   }
-
-  socket.emit('game_update', { game_id: state.game_id });
+  let msg = `📊 Bilan — Demande: ${data.demand} | Vert: ${data.green} | Fossile: ${data.effective_fossil} | +${data.pollution_add} pollution`;
+  if (data.blackout) msg += `\n⚡ BLACKOUT ! Surcharge de ${data.blackout_excess}`;
+  alert(msg);
   loadGame();
 }
 
-socket.on('state_update', () => loadGame());
+socket.on('state_update', (data) => {
+  if (data?.bilan) {
+    showBilanResult(data.bilan);
+  } else {
+    loadGame();
+  }
+});
+
+async function newGame() {
+  await fetch(`${API}/players/reset`, { method: 'POST' });
+  state = { game_id: null, player_slot: null, pseudo: null, role: null };
+  renderWelcome();
+}
+
+socket.on('state_update', (data) => {
+  if (data?.bilan) {
+    showBilanResult(data.bilan);
+  } else {
+    loadGame();
+  }
+});
 
 async function startGame() {
   stopPolling();
@@ -847,11 +868,16 @@ function showEndScreen(won, winners) {
         <div style="font-size:64px;margin-bottom:1rem">💀</div>
         <h1 style="color:#ef4444;margin-bottom:0.5rem">Defeat!</h1>
         <p style="margin-bottom:2rem">Pollution reached 20. The city is lost.</p>
-        <button class="btn btn-secondary" onclick="renderWelcome()">New game</button>
+        <button class="btn btn-secondary" onclick="newGame()">New game</button>
       </div>
     `);
   }
 
   socket.emit('game_update', { game_id: state.game_id });
+}
+async function newGame() {
+  await fetch(`${API}/players/reset`, { method: 'POST' });
+  state = { game_id: null, player_slot: null, pseudo: null, role: null };
+  renderWelcome();
 }
 renderWelcome();

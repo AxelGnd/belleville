@@ -104,7 +104,8 @@ router.post('/:game_id/action', async (req, res) => {
 
   const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
   if (game.phase !== 'actions') return res.status(400).json({ error: 'Pas en phase Actions' });
-  if (game.current_player_slot !== player_slot) return res.status(400).json({ error: "Ce n'est pas ton tour" });
+  // ✅ Après
+  if (Number(game.current_player_slot) !== Number(player_slot)) return res.status(400).json({ error: "Ce n'est pas ton tour" });
 
   const player = (await db.query("SELECT * FROM players WHERE game_id=$1 AND slot=$2", [id, player_slot])).rows[0];
   const event  = game.current_event;
@@ -123,9 +124,10 @@ router.post('/:game_id/action', async (req, res) => {
     if (building.level >= 2) return res.status(400).json({ error: 'Déjà au niveau maximum' });
 
     // Prérequis : Recherche Nv1 pour passer n'importe quoi au Nv2
-    if (building.level === 1 && building.type !== 'recherche') {
-      const recherche = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='recherche'", [id])).rows[0];
-      if (!recherche || recherche.level < 1) {
+    // ✅ Après
+  if (Number(building.level) === 1 && building.type !== 'recherche') {
+    const recherche = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='recherche'", [id])).rows[0];
+    if (!recherche || Number(recherche.level) < 1) {
         return res.status(400).json({ error: 'Le Centre de Recherche doit être Nv1 pour construire un Nv2' });
       }
     }
