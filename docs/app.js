@@ -11,6 +11,32 @@ let state = {
 let pollingInterval = null;
 let gameOver = false;
 
+// Reconnexion automatique au chargement
+async function tryReconnect() {
+  const saved = localStorage.getItem('belleville_session');
+  if (!saved) return false;
+
+  const session = JSON.parse(saved);
+  try {
+    const res = await fetch(`${API}/players/reconnect/${encodeURIComponent(session.pseudo)}`);
+    if (!res.ok) {
+      localStorage.removeItem('belleville_session');
+      return false;
+    }
+    const data = await res.json();
+    state.pseudo      = session.pseudo;
+    state.role        = session.role;
+    state.game_id     = data.player.game_id;
+    state.player_slot = data.player.slot;
+
+    socket.emit('join_game', state.game_id);
+    await loadGame();
+    return true;
+  } catch(e) {
+    localStorage.removeItem('belleville_session');
+    return false;
+  }
+}
 const ROLES = [
   { id:'scientist',    icon:'🔬', name:'The Scientist',        desc:'Upgrade the Research Center and the Hospital to Level 2.' },
   { id:'ecologist',    icon:'🌿', name:'The Ecologist',         desc:'4 Green Energy installations + Pollution Gauge below 3.' },
@@ -98,7 +124,10 @@ async function renderWelcome() {
   `);
 
   await refreshPlayersList();
-  pollingInterval = setInterval(refreshPlayersList, 3000);
+  (async () => {
+  const reconnected = await tryReconnect();
+  if (!reconnected) renderWelcome();
+})();
 }
 
 async function refreshPlayersList() {
@@ -250,6 +279,11 @@ async function joinWithRole(roleId) {
   state.game_id     = data.game_id;
   state.player_slot = data.players.find(p => p.pseudo === state.pseudo)?.slot;
 
+  // Sauvegarde la session
+  localStorage.setItem('belleville_session', JSON.stringify({
+    pseudo: state.pseudo,
+    role:   state.role,
+  }));
   socket.emit('join_game', state.game_id);
   socket.emit('player_joined', { game_id: state.game_id, players: data.players });
 
@@ -602,6 +636,7 @@ function showEndScreen(won, winners) {
 }
 
 async function newGame() {
+  localStorage.removeItem('belleville_session');
   gameOver = false;
   await fetch(`${API}/players/reset`, { method: 'POST' });
   state = { game_id: null, player_slot: null, pseudo: null, role: null };
@@ -650,6 +685,28 @@ function showBuildMenu() {
       </div>`;
   }).join('');
 
+  const centrale = buildings.find(b => b.type === 'centrale_nucleaire');
+const players  = window._playersData || [];
+const totalCredits = players.reduce((sum, p) => sum + p.credits, 0);
+const canDismantle = centrale && Number(centrale.level) >= 1;
+
+const dismantleBtn = canDismantle ? `
+  <div class="build-row" style="border-color:#ef444444;background:#450a0a22">
+    <div class="build-left">
+      <span class="build-icon">💥</span>
+      <div class="build-info">
+        <div class="build-name">Démanteler la Centrale</div>
+        <div class="build-cost">💰 16 cr collectifs (dispo: ${totalCredits} cr) ${totalCredits < 16 ? '<span style="color:#ef4444">· insuffisant</span>' : ''}</div>
+      </div>
+    </div>
+    <button class="build-btn ${totalCredits < 16 ? 'disabled' : ''}"
+      style="background:${totalCredits >= 16 ? '#ef4444' : '#2d3f50'}"
+      ${totalCredits < 16 ? 'disabled' : ''}
+      onclick="dismantle(); closeModal()">
+      Démanteler
+    </button>
+  </div>` : '';
+
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.innerHTML = `
@@ -659,7 +716,7 @@ function showBuildMenu() {
         <h2 style="margin:0">Build / Upgrade</h2>
         <span style="font-size:13px;color:#9ca3af">💰 ${me?.credits ?? 0} cr</span>
       </div>
-      <div class="build-list">${rows}</div>
+      <div class="build-list">${rows}${dismantleBtn}</div>
       <button class="btn btn-secondary" style="margin-top:1rem" onclick="closeModal()">Close</button>
     </div>
   `;
@@ -762,5 +819,16 @@ function showMyRole() {
     </div>
   `);
 }
-
+async function dismantle() {
+  const res = await fetch(`${API}/game/${state.game_id}/dismantle`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ player_slot: state.player_slot }),
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error);
+  alert('💥 Centrale démantelée ! Pollution remise à 0.');
+  socket.emit('game_update', { game_id: state.game_id, emitter_slot: state.player_slot });
+  loadGame();
+}
 renderWelcome();

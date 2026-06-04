@@ -212,6 +212,12 @@ router.post('/:game_id/end-turn', async (req, res) => {
     }
   }
 
+  // Centrale niveau 1 : consomme 1 énergie de base (demand += 1)
+  // Centrale niveau 2 : consomme 2 énergie de base (demand += 2)
+  const centrale = buildings.find(b => b.type === 'centrale_nucleaire');
+  const fossilBaseConsumption = centrale ? Number(centrale.level) : 0;
+  demand += fossilBaseConsumption;
+
   const fossil_covers = Math.max(0, demand - green);
   const maxFossil     = game.fossil_level >= 2 ? 8 : 4;
 
@@ -371,4 +377,52 @@ async function checkVictory(game_id) {
 
   return winners;
 }
+router.get('/reconnect/:pseudo', async (req, res) => {
+  const { pseudo } = req.params;
+  const player = await db.query(
+    "SELECT * FROM players WHERE pseudo=$1", [pseudo]
+  );
+  if (!player.rows[0]) return res.status(404).json({ error: 'Joueur introuvable' });
+
+  const p = player.rows[0];
+  const game = await db.query("SELECT * FROM games WHERE id=$1", [p.game_id]);
+  if (!game.rows[0] || game.rows[0].status === 'waiting') {
+    return res.status(404).json({ error: 'Pas de partie en cours' });
+  }
+
+  res.json({ player: p, game: game.rows[0] });
+});
+router.post('/:game_id/dismantle', async (req, res) => {
+  const { player_slot } = req.body;
+  const id = req.params.game_id;
+
+  const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
+  if (game.phase !== 'actions') return res.status(400).json({ error: 'Pas en phase Actions' });
+  if (Number(game.current_player_slot) !== Number(player_slot)) return res.status(400).json({ error: "Ce n'est pas ton tour" });
+
+  const players = (await db.query("SELECT * FROM players WHERE game_id=$1", [id])).rows;
+  const totalCredits = players.reduce((sum, p) => sum + p.credits, 0);
+
+  if (totalCredits < 16) return res.status(400).json({ error: `Crédits collectifs insuffisants (${totalCredits}/16 cr)` });
+
+  // Déduit les crédits proportionnellement
+  let remaining = 16;
+  for (const p of players) {
+    const contribution = Math.min(p.credits, remaining);
+    if (contribution > 0) {
+      await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [contribution, id, p.slot]);
+      remaining -= contribution;
+    }
+    if (remaining <= 0) break;
+  }
+
+  // Démantèle la centrale
+  await db.query("UPDATE buildings SET level=0, owner_slot=NULL WHERE game_id=$1 AND type='centrale_nucleaire'", [id]);
+  await db.query("UPDATE games SET fossil_level=0, pollution=0 WHERE id=$1", [id]);
+
+  await log(id, game.turn, `💥 La Centrale Fossile a été démantelée ! Pollution remise à 0.`);
+  await nextPlayer(id, game);
+
+  res.json({ success: true });
+});
 module.exports = router;
