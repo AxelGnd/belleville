@@ -9,6 +9,7 @@ let state = {
 };
 
 let pollingInterval = null;
+let gameOver = false;
 
 const ROLES = [
   { id:'scientist',    icon:'🔬', name:'The Scientist',        desc:'Upgrade the Research Center and the Hospital to Level 2.' },
@@ -26,6 +27,7 @@ const ROLES = [
   { id:'union_leader', icon:'👷', name:'The Union Leader',      desc:'Hospital and Fossil Power Plant both at Level 2.' },
   { id:'visionary',    icon:'🔭', name:'The Visionary',         desc:'Research Center Level 2 + own 1 Level 2 Residential + at least 1 Solar Panel or Wind Turbine.' },
 ];
+
 const BUILDING_ICONS = {
   hopital:'🏥', ecole:'🏫', recherche:'🔬',
   residentiel:'🏘', eolienne:'💨', solaire:'☀️',
@@ -38,18 +40,19 @@ const BUILDING_NAMES = {
   parc:'Park', centrale_nucleaire:'Nuclear Power Plant'
 };
 
+const COSTS = {
+  hopital:            [5, 8],
+  ecole:              [5, 8],
+  recherche:          [6, 10],
+  residentiel:        [4, 8],
+  eolienne:           [4, 0],
+  solaire:            [4, 0],
+  parc:               [13, 20],
+  centrale_nucleaire: [0, 4],
+};
+
 function show(html) {
   document.getElementById('app').innerHTML = html;
-}
-
-function getRoleName(roleId) {
-  const role = ROLES.find(r => r.id === roleId);
-  return role ? role.name : roleId;
-}
-
-function getRoleIcon(roleId) {
-  const role = ROLES.find(r => r.id === roleId);
-  return role ? role.icon : '❓';
 }
 
 function stopPolling() {
@@ -59,9 +62,30 @@ function stopPolling() {
   }
 }
 
+function pollColor(p) {
+  if (p < 8)  return '#22c55e';
+  if (p < 15) return '#f59e0b';
+  return '#ef4444';
+}
+
+function phaseLabel(phase) {
+  return { event:'Événement', actions:'Actions', bilan:'Bilan', waiting:'Attente' }[phase] || phase;
+}
+
+// ── SOCKET ───────────────────────────────────────────────────
+socket.on('state_update', (data) => {
+  if (gameOver) return;
+  if (data?.bilan && data?.emitter_slot !== state.player_slot) {
+    showBilanResult(data.bilan);
+  } else if (!data?.bilan) {
+    loadGame();
+  }
+});
+
 // ── VUE 1 : Accueil ──────────────────────────────────────────
 async function renderWelcome() {
   stopPolling();
+  gameOver = false;
 
   show(`
     <div class="badge badge-green">🟢 Game ready</div>
@@ -73,7 +97,6 @@ async function renderWelcome() {
     <div id="players-list"><div class="empty-msg">No players yet...</div></div>
   `);
 
-  // Polling toutes les 3 secondes
   await refreshPlayersList();
   pollingInterval = setInterval(refreshPlayersList, 3000);
 }
@@ -139,16 +162,15 @@ async function spinWheel() {
   } catch(e) {}
 
   const availableRoles = ROLES.filter(r => !takenRoles.includes(r.id));
-
   if (availableRoles.length === 0) {
     alert('All roles are taken! The game is full.');
     return;
   }
 
-  showWheelAnimation(availableRoles, takenRoles);
+  showWheelAnimation(availableRoles);
 }
 
-function showWheelAnimation(availableRoles, takenRoles) {
+function showWheelAnimation(availableRoles) {
   const allRoles = ROLES;
   const chosenRole = availableRoles[Math.floor(Math.random() * availableRoles.length)];
   const segmentAngle = 360 / allRoles.length;
@@ -168,23 +190,8 @@ function showWheelAnimation(availableRoles, takenRoles) {
     <div style="text-align:center;padding:2rem 0">
       <h2 style="margin-bottom:2rem">Spinning your role...</h2>
       <div style="position:relative;display:inline-block">
-        <div style="
-          position:absolute;
-          top:-26px;
-          left:50%;
-          transform:translateX(-50%);
-          font-size:28px;
-          color:#22c55e;
-          z-index:10;
-        ">▼</div>
-        <div id="wheel-wrapper" style="
-          width:${size}px;
-          height:${size}px;
-          border-radius:50%;
-          overflow:hidden;
-          transform:rotate(0deg);
-          transition:none;
-        ">
+        <div style="position:absolute;top:-26px;left:50%;transform:translateX(-50%);font-size:28px;color:#22c55e;z-index:10;">▼</div>
+        <div id="wheel-wrapper" style="width:${size}px;height:${size}px;border-radius:50%;overflow:hidden;transform:rotate(0deg);transition:none;">
           <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
             ${allRoles.map((role, i) => {
               const startAngle = (i * segmentAngle - 90) * Math.PI / 180;
@@ -198,12 +205,8 @@ function showWheelAnimation(availableRoles, takenRoles) {
               const ty = cy + (r * 0.68) * Math.sin(midAngle);
               return `
                 <path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z"
-                      fill="${colors[i % colors.length]}"
-                      stroke="#0f1923" stroke-width="2"/>
-                <text x="${tx}" y="${ty}"
-                      text-anchor="middle"
-                      dominant-baseline="central"
-                      font-size="18">${role.icon}</text>
+                      fill="${colors[i % colors.length]}" stroke="#0f1923" stroke-width="2"/>
+                <text x="${tx}" y="${ty}" text-anchor="middle" dominant-baseline="central" font-size="18">${role.icon}</text>
               `;
             }).join('')}
           </svg>
@@ -219,36 +222,21 @@ function showWheelAnimation(availableRoles, takenRoles) {
     wheel.style.transform  = `rotate(${finalAngle}deg)`;
   }, 100);
 
-  // Après l'animation : efface tout et affiche uniquement le rôle
   setTimeout(() => {
     show(`
       <div style="text-align:center;padding:3rem 1rem;animation:fadeIn .6s ease">
         <div style="font-size:72px;margin-bottom:1.5rem">${chosenRole.icon}</div>
         <div style="font-size:28px;font-weight:800;letter-spacing:-1px;margin-bottom:1rem">${chosenRole.name}</div>
-        <div style="
-          font-size:15px;
-          color:#9ca3af;
-          line-height:1.7;
-          max-width:300px;
-          margin:0 auto 2rem;
-        ">${chosenRole.desc}</div>
-        <div style="
-          background:#1e2d3d;
-          border:1px solid #22c55e44;
-          border-radius:10px;
-          padding:12px;
-          font-size:12px;
-          color:#6b7280;
-          margin-bottom:2rem;
-        ">🤫 Keep your role secret from other players!</div>
+        <div style="font-size:15px;color:#9ca3af;line-height:1.7;max-width:300px;margin:0 auto 2rem;">${chosenRole.desc}</div>
+        <div style="background:#1e2d3d;border:1px solid #22c55e44;border-radius:10px;padding:12px;font-size:12px;color:#6b7280;margin-bottom:2rem;">🤫 Keep your role secret from other players!</div>
         <button class="btn btn-primary" onclick="joinWithRole('${chosenRole.id}')">Enter the city →</button>
       </div>
     `);
   }, 4500);
 }
+
 async function joinWithRole(roleId) {
-  state.role = roleId; // ← déjà là
-  console.log('Role set:', state.role); // ajoutez ça pour debug
+  state.role = roleId;
 
   const res = await fetch(`${API}/players/join`, {
     method: 'POST',
@@ -259,7 +247,7 @@ async function joinWithRole(roleId) {
   const data = await res.json();
   if (!res.ok) return alert(data.error);
 
-  state.game_id    = data.game_id;
+  state.game_id     = data.game_id;
   state.player_slot = data.players.find(p => p.pseudo === state.pseudo)?.slot;
 
   socket.emit('join_game', state.game_id);
@@ -268,7 +256,7 @@ async function joinWithRole(roleId) {
   renderLobby(data.players);
 }
 
-// ── VUE 3 : Lobby ───────────────────────────────────────────
+// ── VUE 3 : Lobby ────────────────────────────────────────────
 function renderLobby(players) {
   stopPolling();
 
@@ -293,7 +281,6 @@ function renderLobby(players) {
   }).join('');
 
   const canStart = players.length === 4;
-  
 
   show(`
     <div class="lobby-header">
@@ -304,19 +291,17 @@ function renderLobby(players) {
     <div class="player-cards-grid">${cards}</div>
     <div class="sep"></div>
     ${canStart
-  ? `<button class="btn btn-primary" onclick="startGame()">🌿 Start the game!</button>`
-  : `<div style="text-align:center;color:#6b7280;font-size:13px">Waiting for ${4 - players.length} more player(s)...</div>`
-}
+      ? `<button class="btn btn-primary" onclick="startGame()">🌿 Start the game!</button>`
+      : `<div style="text-align:center;color:#6b7280;font-size:13px">Waiting for ${4 - players.length} more player(s)...</div>`
+    }
   `);
 
-  // Polling — vérifie si la partie a démarré
   pollingInterval = setInterval(async () => {
     try {
       const res = await fetch(`${API}/players/current`);
       if (!res.ok) return;
       const updatedPlayers = await res.json();
 
-      // Vérifie le statut de la partie
       if (state.game_id) {
         const gameRes = await fetch(`${API}/game/${state.game_id}/state`);
         if (gameRes.ok) {
@@ -336,39 +321,52 @@ function renderLobby(players) {
   }, 2000);
 }
 
+async function startGame() {
+  stopPolling();
+
+  if (!state.game_id) {
+    const res = await fetch(`${API}/players/current`);
+    const players = await res.json();
+    if (players.length > 0) {
+      const gameRes = await fetch(`${API}/game/${players[0].game_id}/state`);
+      const gameData = await gameRes.json();
+      state.game_id = gameData.game.id;
+      state.player_slot = players.find(p => p.pseudo === state.pseudo)?.slot;
+    }
+  }
+
+  await fetch(`${API}/game/${state.game_id}/start`, { method: 'POST' });
+  socket.emit('game_update', { game_id: state.game_id, emitter_slot: state.player_slot });
+  loadGame();
+}
+
+// ── VUE 4 : Jeu ──────────────────────────────────────────────
 async function loadGame() {
+  if (gameOver) return;
   const res  = await fetch(`${API}/game/${state.game_id}/state`);
   const data = await res.json();
   renderGame(data);
 }
 
-function pollColor(p) {
-  if (p < 8)  return '#22c55e';
-  if (p < 15) return '#f59e0b';
-  return '#ef4444';
-}
-
 function renderGame(data) {
   const { game, players, buildings, logs } = data;
+
   if (!state.role && state.player_slot) {
     const meFromServer = players.find(p => p.slot === state.player_slot);
     if (meFromServer) state.role = meFromServer.role;
   }
-  
-  const myRole = ROLES.find(r => r.id === state.role);
-  const me = players.find(p => p.slot === state.player_slot);
-  const pct   = (game.pollution / 20) * 100;
-  const color = pollColor(game.pollution);
-  const isMyTurn = game.current_player_slot === state.player_slot;
-  const event = game.current_event;
 
-  // Joueur actif
-  const activePlayer = players.find(p => p.slot === game.current_player_slot);
+  const myRole      = ROLES.find(r => r.id === state.role);
+  const pct         = (game.pollution / 20) * 100;
+  const color       = pollColor(game.pollution);
+  const isMyTurn    = Number(game.current_player_slot) === Number(state.player_slot);
+  const event       = game.current_event;
+  const activePlayer = players.find(p => Number(p.slot) === Number(game.current_player_slot));
 
   // Players 2x2
   const playerBars = players.map(p => {
-    const isMe = p.slot === state.player_slot;
-    const isActive = p.slot === game.current_player_slot;
+    const isMe     = Number(p.slot) === Number(state.player_slot);
+    const isActive = Number(p.slot) === Number(game.current_player_slot);
     const initials = p.pseudo.substring(0, 2).toUpperCase();
     return `
       <div class="profile-bar-compact ${isMe ? 'me' : ''}" style="${isActive && game.phase === 'actions' ? 'border-color:#f59e0b' : ''}">
@@ -390,12 +388,12 @@ function renderGame(data) {
 
   // Buildings 3 colonnes
   window._buildingsData = {};
-  window._playersData = players;
+  window._playersData   = players;
   const buildingCards = buildings.map(b => {
     window._buildingsData[b.id] = b;
-    const owner = b.owner_slot ? players.find(p => p.slot === b.owner_slot) : null;
-    const pip0 = `<div class="b-pip ${b.level >= 1 ? 'on' : ''}"></div>`;
-    const pip1 = `<div class="b-pip ${b.level >= 2 ? 'on' : ''}"></div>`;
+    const owner = b.owner_slot ? players.find(p => Number(p.slot) === Number(b.owner_slot)) : null;
+    const pip0  = `<div class="b-pip ${Number(b.level) >= 1 ? 'on' : ''}"></div>`;
+    const pip1  = `<div class="b-pip ${Number(b.level) >= 2 ? 'on' : ''}"></div>`;
     return `
       <div class="building-card" onclick="showBuildingModal(${b.id})">
         <div class="b-icon">${BUILDING_ICONS[b.type] || '🏗'}</div>
@@ -409,7 +407,6 @@ function renderGame(data) {
   // Zone de phase
   let phaseZone = '';
 
-  // ── Phase : EVENT ──────────────────────────────────────────
   if (game.phase === 'event') {
     phaseZone = `
       <div class="phase-banner event">
@@ -420,7 +417,6 @@ function renderGame(data) {
     `;
   }
 
-  // ── Phase : ACTIONS ────────────────────────────────────────
   if (game.phase === 'actions') {
     if (event) {
       const typeColor = event.type === 'crisis' ? '#ef4444' : event.type === 'opportunity' ? '#22c55e' : '#f59e0b';
@@ -455,7 +451,6 @@ function renderGame(data) {
     }
   }
 
-  // ── Phase : BILAN ──────────────────────────────────────────
   if (game.phase === 'bilan') {
     phaseZone = `
       <div class="phase-banner bilan">
@@ -520,59 +515,12 @@ function renderGame(data) {
   `);
 }
 
-function phaseLabel(phase) {
-  return { event:'Événement', actions:'Actions', bilan:'Bilan', waiting:'Attente' }[phase] || phase;
-}
-
-// ── Liste des rôles ──────────────────────────────────────────
-function showRolesList() {
-  const roleCards = ROLES.map(r => `
-    <div class="role-info-card">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-        <span style="font-size:28px">${r.icon}</span>
-        <span style="font-size:15px;font-weight:700">${r.name}</span>
-      </div>
-      <div style="font-size:13px;color:#9ca3af;line-height:1.6">${r.desc}</div>
-    </div>
-  `).join('');
-
-  show(`
-    <button class="back-btn" onclick="loadGame()">← Back to game</button>
-    <h2>All roles & objectives</h2>
-    <p>Complete your secret objective to win. Pollution reaching 20 means everyone loses!</p>
-    ${roleCards}
-  `);
-}
-
-async function upgrade(building_id) {
-  const res = await fetch(`${API}/game/${state.game_id}/upgrade`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ building_id, player_slot: state.player_slot }),
-  });
-  const data = await res.json();
-  if (!res.ok) return alert(data.error);
-  socket.emit('game_update', { game_id: state.game_id });
-  loadGame();
-}
-
-async function depollute() {
-  const res = await fetch(`${API}/game/${state.game_id}/depollute`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ player_slot: state.player_slot }),
-  });
-  const data = await res.json();
-  if (!res.ok) return alert(data.error);
-  alert(`✅ Pollution reduced by ${data.reduction} step(s)!`);
-  loadGame();
-}
-
+// ── Actions ──────────────────────────────────────────────────
 async function drawEvent() {
   const res  = await fetch(`${API}/game/${state.game_id}/draw-event`, { method: 'POST' });
   const data = await res.json();
   if (!res.ok) return alert(data.error);
-  socket.emit('game_update', { game_id: state.game_id });
+  socket.emit('game_update', { game_id: state.game_id, emitter_slot: state.player_slot });
   loadGame();
 }
 
@@ -587,82 +535,118 @@ async function doAction(action_type, building_id = null) {
   });
   const data = await res.json();
   if (!res.ok) return alert(data.error);
-  socket.emit('game_update', { game_id: state.game_id });
+  socket.emit('game_update', { game_id: state.game_id, emitter_slot: state.player_slot });
   loadGame();
 }
 
+async function endTurn() {
+  const res  = await fetch(`${API}/game/${state.game_id}/end-turn`, { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error);
+
+  showBilanResult(data);
+  socket.emit('game_update', { game_id: state.game_id, bilan: data, emitter_slot: state.player_slot });
+}
+
+function showBilanResult(data) {
+  if (data.winners && data.winners.length > 0) {
+    showEndScreen(true, data.winners);
+    return;
+  }
+  if (data.lost) {
+    showEndScreen(false, []);
+    return;
+  }
+  let msg = `📊 Bilan — Demande: ${data.demand} | Vert: ${data.green} | Fossile: ${data.effective_fossil} | +${data.pollution_add} pollution`;
+  if (data.blackout) msg += `\n⚡ BLACKOUT ! Surcharge de ${data.blackout_excess}`;
+  alert(msg);
+  loadGame();
+}
+
+function showEndScreen(won, winners) {
+  gameOver = true;
+  stopPolling();
+
+  if (won) {
+    const winnerCards = winners.map(w => {
+      const role = ROLES.find(r => r.id === w.role);
+      return `
+        <div style="background:#14532d22;border:1px solid #22c55e44;border-radius:12px;padding:1.25rem;margin-bottom:10px;text-align:center;">
+          <div style="font-size:48px;margin-bottom:8px">${role?.icon || '🏆'}</div>
+          <div style="font-size:20px;font-weight:800;margin-bottom:4px">${w.pseudo}</div>
+          <div style="font-size:14px;color:#22c55e;font-weight:600">${role?.name || w.role}</div>
+          <div style="font-size:12px;color:#9ca3af;margin-top:6px">${role?.desc || ''}</div>
+        </div>
+      `;
+    }).join('');
+
+    show(`
+      <div style="text-align:center;padding:2rem 0">
+        <div style="font-size:64px;margin-bottom:1rem">🏆</div>
+        <h1 style="color:#22c55e;margin-bottom:0.5rem">Victory!</h1>
+        <p style="margin-bottom:2rem">A player has completed their secret objective!</p>
+        ${winnerCards}
+        <button class="btn btn-secondary" style="margin-top:1rem" onclick="newGame()">New game</button>
+      </div>
+    `);
+  } else {
+    show(`
+      <div style="text-align:center;padding:2rem 0">
+        <div style="font-size:64px;margin-bottom:1rem">💀</div>
+        <h1 style="color:#ef4444;margin-bottom:0.5rem">Defeat!</h1>
+        <p style="margin-bottom:2rem">Pollution reached 20. The city is lost.</p>
+        <button class="btn btn-secondary" onclick="newGame()">New game</button>
+      </div>
+    `);
+  }
+}
+
+async function newGame() {
+  gameOver = false;
+  await fetch(`${API}/players/reset`, { method: 'POST' });
+  state = { game_id: null, player_slot: null, pseudo: null, role: null };
+  renderWelcome();
+}
+
+// ── Build menu ───────────────────────────────────────────────
 function showBuildMenu() {
   const buildings = Object.values(window._buildingsData || {});
-  const me = window._playersData?.find(p => p.slot === state.player_slot);
+  const me = window._playersData?.find(p => Number(p.slot) === Number(state.player_slot));
+  const recherche = buildings.find(b => b.type === 'recherche');
+  const rechercheOk = recherche && Number(recherche.level) >= 1;
 
-  const costs = {
-    hopital:            [5, 8],
-    ecole:              [5, 8],
-    recherche:          [6, 10],
-    residentiel:        [4, 8],
-    eolienne:           [4, 6],
-    solaire:            [4, 6],
-    parc:               [13, 20],
-    centrale_nucleaire: [0, 4],
-  };
+  const rows = buildings.map(b => {
+    const cost = COSTS[b.type]?.[Number(b.level)] ?? 0;
+    const canUpgrade = Number(b.level) < 2
+      && cost > 0
+      && (Number(b.level) === 0 || b.type === 'recherche' || rechercheOk);
+    const affordable = me && me.credits >= cost;
 
-  // Regroupe par type
-  const grouped = {};
-  for (const b of buildings) {
-    if (!grouped[b.type]) grouped[b.type] = [];
-    grouped[b.type].push(b);
-  }
-
-  const rows = Object.entries(grouped).map(([type, list]) => {
-    const hasLv0 = list.find(b => b.level === 0);
-    const hasLv1 = list.find(b => b.level === 1);
-    const cost0  = costs[type]?.[0] ?? 0;
-    const cost1  = costs[type]?.[1] ?? 0;
-    const recherche = buildings.find(b => b.type === 'recherche');
-    const rechercheOk = recherche && recherche.level >= 1;
-    const canBuy0 = hasLv0 && cost0 > 0;
-    const canBuy1 = hasLv1 && cost1 > 0 && (type === 'recherche' || rechercheOk);
-
-    if (!canBuy0 && !canBuy1) return `
+    if (!canUpgrade) return `
       <div class="build-row max">
         <div class="build-left">
-          <span class="build-icon">${BUILDING_ICONS[type]||'🏗'}</span>
+          <span class="build-icon">${BUILDING_ICONS[b.type]||'🏗'}</span>
           <div class="build-info">
-            <div class="build-name">${BUILDING_NAMES[type]||type}</div>
-            <div class="build-status" style="color:#22c55e">✅ All maxed</div>
+            <div class="build-name">${BUILDING_NAMES[b.type]||b.type} (Nv${b.level})</div>
+            <div class="build-status">✅ Max ou verrouillé</div>
           </div>
         </div>
       </div>`;
 
-    const btn0 = canBuy0 ? `
-  <div style="text-align:center">
-    <div class="build-cost">💰 ${cost0} cr</div>
-    <button class="build-btn ${me?.credits < cost0 ? 'disabled':''}"
-      ${me?.credits < cost0 ? 'disabled':''}
-      onclick="doAction('upgrade',${hasLv0.id});closeModal()">
-      Lv 0→1
-    </button>
-  </div>` : '';
-
-    const btn1 = canBuy1 ? `
-  <div style="text-align:center">
-    <div class="build-cost">💰 ${cost1} cr</div>
-    <button class="build-btn ${me?.credits < cost1 ? 'disabled':''}"
-      ${me?.credits < cost1 ? 'disabled':''}
-      onclick="doAction('upgrade',${hasLv1.id});closeModal()">
-      Lv 1→2
-    </button>
-  </div>` : '';
-
     return `
       <div class="build-row">
         <div class="build-left">
-          <span class="build-icon">${BUILDING_ICONS[type]||'🏗'}</span>
-          <div class="build-name">${BUILDING_NAMES[type]||type}</div>
+          <span class="build-icon">${BUILDING_ICONS[b.type]||'🏗'}</span>
+          <div class="build-info">
+            <div class="build-name">${BUILDING_NAMES[b.type]||b.type} Nv${b.level}→${Number(b.level)+1}</div>
+            <div class="build-cost">💰 ${cost} cr ${!affordable ? '<span style="color:#ef4444">· insuffisant</span>' : ''}</div>
+          </div>
         </div>
-        <div style="display:flex;gap:8px">
-          ${btn0}${btn1}
-        </div>
+        <button class="build-btn ${!affordable ? 'disabled' : ''}"
+          ${!affordable ? 'disabled' : ''}
+          onclick="doAction('upgrade', ${b.id}); closeModal()">
+          Améliorer
+        </button>
       </div>`;
   }).join('');
 
@@ -684,120 +668,37 @@ function showBuildMenu() {
   window._currentModal = modal;
 }
 
-async function endTurn() {
-  const res  = await fetch(`${API}/game/${state.game_id}/end-turn`, { method: 'POST' });
-  const data = await res.json();
-  if (!res.ok) return alert(data.error);
+function showBuildingModal(buildingId) {
+  const building = window._buildingsData[buildingId];
+  const players  = window._playersData;
+  if (!building) return;
 
-  socket.emit('game_update', { game_id: state.game_id, bilan: data });
-  showBilanResult(data);
-}
+  const owner = building.owner_slot ? players.find(p => Number(p.slot) === Number(building.owner_slot)) : null;
+  const BUILDING_UPGRADES = {
+    hopital:            [{ level:1, cost:5,  desc:'Accès aux soins. Prérequis pour Nv2.' }, { level:2, cost:8,  desc:'Immunité contre les crises sanitaires.' }],
+    ecole:              [{ level:1, cost:5,  desc:'Débloque la Campagne de Dépollution.' }, { level:2, cost:8,  desc:'Dépollution retire 2 cases au lieu de 1.' }],
+    recherche:          [{ level:1, cost:6,  desc:'Prérequis pour construire tout Nv2.' }, { level:2, cost:10, desc:'Énergie verte coûte 3 cr au lieu de 4.' }],
+    residentiel:        [{ level:1, cost:4,  desc:'+1 cr/tour pour le propriétaire.' },     { level:2, cost:8,  desc:'+2 cr/tour. Consomme moins d\'énergie.' }],
+    eolienne:           [{ level:1, cost:4,  desc:'Couvre 1 point de demande énergétique.' }, { level:2, cost:0, desc:'Non améliorable.' }],
+    solaire:            [{ level:1, cost:4,  desc:'Couvre 1 point de demande énergétique.' }, { level:2, cost:0, desc:'Non améliorable.' }],
+    parc:               [{ level:1, cost:13, desc:'-1 pollution par tour.' },                { level:2, cost:20, desc:'-2 pollution par tour.' }],
+    centrale_nucleaire: [{ level:1, cost:0,  desc:'Couvre jusqu\'à 4 points de demande.' }, { level:2, cost:4,  desc:'Couvre 8 points mais ×2 pollution. +4 pollution immédiat.' }],
+  };
 
-function showBilanResult(data) {
-  if (data.winners && data.winners.length > 0) {
-    showEndScreen(true, data.winners);
-    return;
-  }
-  if (data.lost) {
-    showEndScreen(false, []);
-    return;
-  }
-  let msg = `📊 Bilan — Demande: ${data.demand} | Vert: ${data.green} | Fossile: ${data.effective_fossil} | +${data.pollution_add} pollution`;
-  if (data.blackout) msg += `\n⚡ BLACKOUT ! Surcharge de ${data.blackout_excess}`;
-  alert(msg);
-  loadGame();
-}
-
-socket.on('state_update', (data) => {
-  if (data?.bilan) {
-    showBilanResult(data.bilan);
-  } else {
-    loadGame();
-  }
-});
-
-async function newGame() {
-  await fetch(`${API}/players/reset`, { method: 'POST' });
-  state = { game_id: null, player_slot: null, pseudo: null, role: null };
-  renderWelcome();
-}
-
-socket.on('state_update', (data) => {
-  if (data?.bilan) {
-    showBilanResult(data.bilan);
-  } else {
-    loadGame();
-  }
-});
-
-async function startGame() {
-  stopPolling();
-
-  // Récupère le game_id si null
-  if (!state.game_id) {
-    const res = await fetch(`${API}/players/current`);
-    const players = await res.json();
-    if (players.length > 0) {
-      const gameRes = await fetch(`${API}/game/${players[0].game_id}/state`);
-      const gameData = await gameRes.json();
-      state.game_id = gameData.game.id;
-      state.player_slot = players.find(p => p.pseudo === state.pseudo)?.slot;
-    }
-  }
-
-  await fetch(`${API}/game/${state.game_id}/start`, { method: 'POST' });
-  socket.emit('game_update', { game_id: state.game_id });
-  loadGame();
-}
-
-async function loadGame() {
-  const res  = await fetch(`${API}/game/${state.game_id}/state`);
-  const data = await res.json();
-  renderGame(data);
-}
-
-function showMyRole() {
-  const me = { role: state.role };
-  const myRole = ROLES.find(r => r.id === state.role);
-  if (!myRole) return;
-
-  show(`
-    <button class="back-btn" onclick="loadGame()">← Back to game</button>
-    <div style="text-align:center;padding:2rem 0;animation:fadeIn .4s ease">
-      <div style="font-size:64px;margin-bottom:1rem">${myRole.icon}</div>
-      <div style="font-size:26px;font-weight:800;margin-bottom:1rem">${myRole.name}</div>
-      <div style="
-        font-size:14px;color:#9ca3af;
-        line-height:1.7;max-width:320px;
-        margin:0 auto 2rem;
-      ">${myRole.desc}</div>
-      <div style="
-        background:#14532d22;border:1px solid #22c55e44;
-        border-radius:10px;padding:12px;
-        font-size:12px;color:#22c55e;
-      ">🤫 Keep this secret from other players!</div>
-    </div>
-  `);
-}
-function showBuildingModal(buildingId, building, players) {
   const upgrades = BUILDING_UPGRADES[building.type] || [];
-  const owner = building.owner_slot ? players.find(p => p.slot === building.owner_slot) : null;
-
   const tiers = upgrades.map(u => {
-    const isCurrent = building.level === u.level;
-    const isUnlocked = building.level >= u.level;
+    const isCurrent  = Number(building.level) === u.level;
+    const isUnlocked = Number(building.level) >= u.level;
     return `
       <div class="upgrade-tier ${isCurrent ? 'current' : ''} ${!isUnlocked ? 'locked' : ''}">
         <div class="tier-header">
-          <span class="tier-label">Level ${u.level} ${isCurrent ? '← current' : ''}</span>
+          <span class="tier-label">Level ${u.level} ${isCurrent ? '← actuel' : ''}</span>
           ${u.cost > 0 ? `<span class="tier-cost">💰 ${u.cost} cr</span>` : ''}
         </div>
         <div class="tier-desc">${u.desc}</div>
       </div>
     `;
   }).join('');
-
-  const canUpgrade = building.level < 2 && upgrades[building.level]?.cost > 0;
 
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
@@ -812,13 +713,9 @@ function showBuildingModal(buildingId, building, players) {
         </div>
       </div>
       ${tiers}
-      <div style="display:flex;gap:8px;margin-top:1rem">
-        ${canUpgrade ? `<button class="btn btn-primary" style="margin:0" onclick="upgrade(${buildingId});closeModal()">Upgrade → ${upgrades[building.level].cost} cr</button>` : ''}
-        <button class="btn btn-secondary" style="margin:0;${canUpgrade ? '' : 'width:100%'}" onclick="closeModal()">Close</button>
-      </div>
+      <button class="btn btn-secondary" style="margin-top:1rem" onclick="closeModal()">Fermer</button>
     </div>
   `;
-
   modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
   document.body.appendChild(modal);
   window._currentModal = modal;
@@ -830,54 +727,40 @@ function closeModal() {
     window._currentModal = null;
   }
 }
-function showEndScreen(won, winners) {
-  stopPolling();
 
-  if (won) {
-    const winnerCards = winners.map(w => {
-      const role = ROLES.find(r => r.id === w.role);
-      return `
-        <div style="
-          background:#14532d22;
-          border:1px solid #22c55e44;
-          border-radius:12px;
-          padding:1.25rem;
-          margin-bottom:10px;
-          text-align:center;
-        ">
-          <div style="font-size:48px;margin-bottom:8px">${role?.icon || '🏆'}</div>
-          <div style="font-size:20px;font-weight:800;margin-bottom:4px">${w.pseudo}</div>
-          <div style="font-size:14px;color:#22c55e;font-weight:600">${role?.name || w.role}</div>
-          <div style="font-size:12px;color:#9ca3af;margin-top:6px">${role?.desc || ''}</div>
-        </div>
-      `;
-    }).join('');
-
-    show(`
-      <div style="text-align:center;padding:2rem 0">
-        <div style="font-size:64px;margin-bottom:1rem">🏆</div>
-        <h1 style="color:#22c55e;margin-bottom:0.5rem">Victory!</h1>
-        <p style="margin-bottom:2rem">A player has completed their secret objective!</p>
-        ${winnerCards}
-        <button class="btn btn-secondary" style="margin-top:1rem" onclick="renderWelcome()">New game</button>
+// ── Rôles ────────────────────────────────────────────────────
+function showRolesList() {
+  const roleCards = ROLES.map(r => `
+    <div class="role-info-card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <span style="font-size:28px">${r.icon}</span>
+        <span style="font-size:15px;font-weight:700">${r.name}</span>
       </div>
-    `);
-  } else {
-    show(`
-      <div style="text-align:center;padding:2rem 0">
-        <div style="font-size:64px;margin-bottom:1rem">💀</div>
-        <h1 style="color:#ef4444;margin-bottom:0.5rem">Defeat!</h1>
-        <p style="margin-bottom:2rem">Pollution reached 20. The city is lost.</p>
-        <button class="btn btn-secondary" onclick="newGame()">New game</button>
-      </div>
-    `);
-  }
+      <div style="font-size:13px;color:#9ca3af;line-height:1.6">${r.desc}</div>
+    </div>
+  `).join('');
 
-  socket.emit('game_update', { game_id: state.game_id });
+  show(`
+    <button class="back-btn" onclick="loadGame()">← Back to game</button>
+    <h2>All roles & objectives</h2>
+    <p>Complete your secret objective to win. Pollution reaching 20 means everyone loses!</p>
+    ${roleCards}
+  `);
 }
-async function newGame() {
-  await fetch(`${API}/players/reset`, { method: 'POST' });
-  state = { game_id: null, player_slot: null, pseudo: null, role: null };
-  renderWelcome();
+
+function showMyRole() {
+  const myRole = ROLES.find(r => r.id === state.role);
+  if (!myRole) return;
+
+  show(`
+    <button class="back-btn" onclick="loadGame()">← Back to game</button>
+    <div style="text-align:center;padding:2rem 0;animation:fadeIn .4s ease">
+      <div style="font-size:64px;margin-bottom:1rem">${myRole.icon}</div>
+      <div style="font-size:26px;font-weight:800;margin-bottom:1rem">${myRole.name}</div>
+      <div style="font-size:14px;color:#9ca3af;line-height:1.7;max-width:320px;margin:0 auto 2rem;">${myRole.desc}</div>
+      <div style="background:#14532d22;border:1px solid #22c55e44;border-radius:10px;padding:12px;font-size:12px;color:#22c55e;">🤫 Keep this secret from other players!</div>
+    </div>
+  `);
 }
+
 renderWelcome();
