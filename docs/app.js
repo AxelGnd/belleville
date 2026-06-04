@@ -31,10 +31,13 @@ async function tryReconnect() {
       return false;
     }
 
-    if (data.game.status !== 'playing') {
-      localStorage.removeItem('belleville_session');
-      return false;
-    }
+    if (
+  data.game.status !== 'waiting' &&
+  data.game.status !== 'playing'
+) {
+  localStorage.removeItem('belleville_session');
+  return false;
+}
 
     state.pseudo      = session.pseudo;
     state.role        = session.role;
@@ -42,8 +45,16 @@ async function tryReconnect() {
     state.player_slot = data.player.slot;
 
     socket.emit('join_game', state.game_id);
-    await loadGame();
-    return true;
+
+if (data.game.status === 'waiting') {
+  const playersRes = await fetch(`${API}/players/current`);
+  const players = await playersRes.json();
+  renderLobby(players);
+} else {
+  await loadGame();
+}
+
+return true;
   } catch(e) {
     localStorage.removeItem('belleville_session');
     return false;
@@ -307,7 +318,7 @@ function renderLobby(players) {
   const cards = [1,2,3,4].map(slot => {
     const p = players.find(p => p.slot === slot);
     if (p) {
-      const isMe = p.pseudo === state.pseudo;
+      const isMe = Number(p.slot) === Number(state.player_slot);
       return `
         <div class="player-card">
           <div class="player-avatar large">${p.pseudo[0].toUpperCase()}</div>
