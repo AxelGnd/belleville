@@ -69,21 +69,21 @@ router.post('/join', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
-router.get('/current', async (req, res) => {
-  try {
-    const game = await db.query(
-      "SELECT * FROM games WHERE status='waiting' ORDER BY id DESC LIMIT 1"
-    );
-    if (game.rows.length === 0) return res.json([]);
-    const players = await db.query(
-      "SELECT * FROM players WHERE game_id=$1",
-      [game.rows[0].id]
-    );
-    res.json(players.rows);
-  } catch (err) {
-    res.json([]);
+
+router.get('/reconnect/:pseudo', async (req, res) => {
+  const { pseudo } = req.params;
+  const player = await db.query("SELECT * FROM players WHERE pseudo=$1", [pseudo]);
+  if (!player.rows[0]) return res.status(404).json({ error: 'Joueur introuvable' });
+
+  const p = player.rows[0];
+  const game = await db.query("SELECT * FROM games WHERE id=$1", [p.game_id]);
+  if (!game.rows[0] || game.rows[0].status === 'waiting') {
+    return res.status(404).json({ error: 'Pas de partie en cours' });
   }
+
+  res.json({ player: p, game: game.rows[0] });
 });
+
 router.post('/reset', async (req, res) => {
   await db.query("DELETE FROM players");
   await db.query("DELETE FROM buildings");

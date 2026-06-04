@@ -11,19 +11,31 @@ let state = {
 let pollingInterval = null;
 let gameOver = false;
 
-// Reconnexion automatique au chargement
 async function tryReconnect() {
-  const saved = localStorage.getItem('belleville_session');
-  if (!saved) return false;
-
-  const session = JSON.parse(saved);
   try {
+    const saved = localStorage.getItem('belleville_session');
+    if (!saved) return false;
+
+    const session = JSON.parse(saved);
+    if (!session?.pseudo) return false;
+
     const res = await fetch(`${API}/players/reconnect/${encodeURIComponent(session.pseudo)}`);
     if (!res.ok) {
       localStorage.removeItem('belleville_session');
       return false;
     }
+
     const data = await res.json();
+    if (!data.player || !data.game) {
+      localStorage.removeItem('belleville_session');
+      return false;
+    }
+
+    if (data.game.status !== 'playing') {
+      localStorage.removeItem('belleville_session');
+      return false;
+    }
+
     state.pseudo      = session.pseudo;
     state.role        = session.role;
     state.game_id     = data.player.game_id;
@@ -37,6 +49,7 @@ async function tryReconnect() {
     return false;
   }
 }
+
 const ROLES = [
   { id:'scientist',    icon:'🔬', name:'The Scientist',        desc:'Upgrade the Research Center and the Hospital to Level 2.' },
   { id:'ecologist',    icon:'🌿', name:'The Ecologist',         desc:'4 Green Energy installations + Pollution Gauge below 3.' },
@@ -98,7 +111,6 @@ function phaseLabel(phase) {
   return { event:'Événement', actions:'Actions', bilan:'Bilan', waiting:'Attente' }[phase] || phase;
 }
 
-// ── SOCKET ───────────────────────────────────────────────────
 socket.on('state_update', (data) => {
   if (gameOver) return;
   if (data?.bilan && data?.emitter_slot !== state.player_slot) {
@@ -124,10 +136,7 @@ async function renderWelcome() {
   `);
 
   await refreshPlayersList();
-  (async () => {
-  const reconnected = await tryReconnect();
-  if (!reconnected) renderWelcome();
-})();
+  pollingInterval = setInterval(refreshPlayersList, 3000);
 }
 
 async function refreshPlayersList() {
@@ -161,6 +170,7 @@ async function refreshPlayersList() {
 }
 
 function showJoinForm() {
+  localStorage.removeItem('belleville_session');
   stopPolling();
   show(`
     <button class="back-btn" onclick="renderWelcome()">← Back</button>
@@ -279,11 +289,11 @@ async function joinWithRole(roleId) {
   state.game_id     = data.game_id;
   state.player_slot = data.players.find(p => p.pseudo === state.pseudo)?.slot;
 
-  // Sauvegarde la session
   localStorage.setItem('belleville_session', JSON.stringify({
     pseudo: state.pseudo,
     role:   state.role,
   }));
+
   socket.emit('join_game', state.game_id);
   socket.emit('player_joined', { game_id: state.game_id, players: data.players });
 
@@ -390,14 +400,13 @@ function renderGame(data) {
     if (meFromServer) state.role = meFromServer.role;
   }
 
-  const myRole      = ROLES.find(r => r.id === state.role);
-  const pct         = (game.pollution / 20) * 100;
-  const color       = pollColor(game.pollution);
-  const isMyTurn    = Number(game.current_player_slot) === Number(state.player_slot);
-  const event       = game.current_event;
+  const myRole       = ROLES.find(r => r.id === state.role);
+  const pct          = (game.pollution / 20) * 100;
+  const color        = pollColor(game.pollution);
+  const isMyTurn     = Number(game.current_player_slot) === Number(state.player_slot);
+  const event        = game.current_event;
   const activePlayer = players.find(p => Number(p.slot) === Number(game.current_player_slot));
 
-  // Players 2x2
   const playerBars = players.map(p => {
     const isMe     = Number(p.slot) === Number(state.player_slot);
     const isActive = Number(p.slot) === Number(game.current_player_slot);
@@ -420,7 +429,6 @@ function renderGame(data) {
     `;
   }).join('');
 
-  // Buildings 3 colonnes
   window._buildingsData = {};
   window._playersData   = players;
   const buildingCards = buildings.map(b => {
@@ -438,7 +446,6 @@ function renderGame(data) {
     `;
   }).join('');
 
-  // Zone de phase
   let phaseZone = '';
 
   if (game.phase === 'event') {
@@ -686,26 +693,26 @@ function showBuildMenu() {
   }).join('');
 
   const centrale = buildings.find(b => b.type === 'centrale_nucleaire');
-const players  = window._playersData || [];
-const totalCredits = players.reduce((sum, p) => sum + p.credits, 0);
-const canDismantle = centrale && Number(centrale.level) >= 1;
+  const players  = window._playersData || [];
+  const totalCredits = players.reduce((sum, p) => sum + p.credits, 0);
+  const canDismantle = centrale && Number(centrale.level) >= 1;
 
-const dismantleBtn = canDismantle ? `
-  <div class="build-row" style="border-color:#ef444444;background:#450a0a22">
-    <div class="build-left">
-      <span class="build-icon">💥</span>
-      <div class="build-info">
-        <div class="build-name">Démanteler la Centrale</div>
-        <div class="build-cost">💰 16 cr collectifs (dispo: ${totalCredits} cr) ${totalCredits < 16 ? '<span style="color:#ef4444">· insuffisant</span>' : ''}</div>
+  const dismantleBtn = canDismantle ? `
+    <div class="build-row" style="border-color:#ef444444;background:#450a0a22">
+      <div class="build-left">
+        <span class="build-icon">💥</span>
+        <div class="build-info">
+          <div class="build-name">Démanteler la Centrale</div>
+          <div class="build-cost">💰 16 cr collectifs (dispo: ${totalCredits} cr) ${totalCredits < 16 ? '<span style="color:#ef4444">· insuffisant</span>' : ''}</div>
+        </div>
       </div>
-    </div>
-    <button class="build-btn ${totalCredits < 16 ? 'disabled' : ''}"
-      style="background:${totalCredits >= 16 ? '#ef4444' : '#2d3f50'}"
-      ${totalCredits < 16 ? 'disabled' : ''}
-      onclick="dismantle(); closeModal()">
-      Démanteler
-    </button>
-  </div>` : '';
+      <button class="build-btn ${totalCredits < 16 ? 'disabled' : ''}"
+        style="background:${totalCredits >= 16 ? '#ef4444' : '#2d3f50'}"
+        ${totalCredits < 16 ? 'disabled' : ''}
+        onclick="dismantle(); closeModal()">
+        Démanteler
+      </button>
+    </div>` : '';
 
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
@@ -735,10 +742,10 @@ function showBuildingModal(buildingId) {
     hopital:            [{ level:1, cost:5,  desc:'Accès aux soins. Prérequis pour Nv2.' }, { level:2, cost:8,  desc:'Immunité contre les crises sanitaires.' }],
     ecole:              [{ level:1, cost:5,  desc:'Débloque la Campagne de Dépollution.' }, { level:2, cost:8,  desc:'Dépollution retire 2 cases au lieu de 1.' }],
     recherche:          [{ level:1, cost:6,  desc:'Prérequis pour construire tout Nv2.' }, { level:2, cost:10, desc:'Énergie verte coûte 3 cr au lieu de 4.' }],
-    residentiel:        [{ level:1, cost:4,  desc:'+1 cr/tour pour le propriétaire.' },     { level:2, cost:8,  desc:'+2 cr/tour. Consomme moins d\'énergie.' }],
+    residentiel:        [{ level:1, cost:4,  desc:'+1 cr/tour pour le propriétaire.' },    { level:2, cost:8,  desc:'+2 cr/tour. Consomme moins d\'énergie.' }],
     eolienne:           [{ level:1, cost:4,  desc:'Couvre 1 point de demande énergétique.' }, { level:2, cost:0, desc:'Non améliorable.' }],
     solaire:            [{ level:1, cost:4,  desc:'Couvre 1 point de demande énergétique.' }, { level:2, cost:0, desc:'Non améliorable.' }],
-    parc:               [{ level:1, cost:13, desc:'-1 pollution par tour.' },                { level:2, cost:20, desc:'-2 pollution par tour.' }],
+    parc:               [{ level:1, cost:13, desc:'-1 pollution par tour.' },               { level:2, cost:20, desc:'-2 pollution par tour.' }],
     centrale_nucleaire: [{ level:1, cost:0,  desc:'Couvre jusqu\'à 4 points de demande.' }, { level:2, cost:4,  desc:'Couvre 8 points mais ×2 pollution. +4 pollution immédiat.' }],
   };
 
@@ -819,6 +826,7 @@ function showMyRole() {
     </div>
   `);
 }
+
 async function dismantle() {
   const res = await fetch(`${API}/game/${state.game_id}/dismantle`, {
     method: 'POST',
@@ -831,4 +839,12 @@ async function dismantle() {
   socket.emit('game_update', { game_id: state.game_id, emitter_slot: state.player_slot });
   loadGame();
 }
-renderWelcome();
+
+(async () => {
+  try {
+    const reconnected = await tryReconnect();
+    if (!reconnected) renderWelcome();
+  } catch(e) {
+    renderWelcome();
+  }
+})();

@@ -17,17 +17,16 @@ const EVENTS = [
 ];
 
 const COSTS = {
-  hopital:     [5, 8],
-  ecole:       [5, 8],
-  recherche:   [6, 10],
-  residentiel: [4, 8],
-  eolienne:    [4, 0],
-  solaire:     [4, 0],
-  parc:        [13, 20],
+  hopital:            [5, 8],
+  ecole:              [5, 8],
+  recherche:          [6, 10],
+  residentiel:        [4, 8],
+  eolienne:           [4, 0],
+  solaire:            [4, 0],
+  parc:               [13, 20],
   centrale_nucleaire: [0, 4],
 };
 
-// ── GET state ────────────────────────────────────────────────
 router.get('/:game_id/state', async (req, res) => {
   const id = req.params.game_id;
   const [game, players, buildings, logs] = await Promise.all([
@@ -44,7 +43,6 @@ router.get('/:game_id/state', async (req, res) => {
   });
 });
 
-// ── POST start ───────────────────────────────────────────────
 router.post('/:game_id/start', async (req, res) => {
   const id = req.params.game_id;
   await db.query(
@@ -55,7 +53,6 @@ router.post('/:game_id/start', async (req, res) => {
   res.json({ success: true });
 });
 
-// ── POST draw-event ──────────────────────────────────────────
 router.post('/:game_id/draw-event', async (req, res) => {
   const id = req.params.game_id;
   const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
@@ -64,10 +61,9 @@ router.post('/:game_id/draw-event', async (req, res) => {
 
   const event = EVENTS[Math.floor(Math.random() * EVENTS.length)];
 
-  // Appliquer les effets immédiats
   if (event.effect === 'pollution_plus2') {
-    const buildings = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='hopital'", [id])).rows[0];
-    const amount = buildings?.level >= 1 ? 1 : 2;
+    const hopital = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='hopital'", [id])).rows[0];
+    const amount = hopital?.level >= 1 ? 1 : 2;
     await db.query("UPDATE games SET pollution=LEAST(20, pollution+$1) WHERE id=$2", [amount, id]);
   }
   if (event.effect === 'all_gain2cr') {
@@ -97,37 +93,31 @@ router.post('/:game_id/draw-event', async (req, res) => {
   res.json({ event });
 });
 
-// ── POST action ──────────────────────────────────────────────
 router.post('/:game_id/action', async (req, res) => {
   const { player_slot, action_type, building_id } = req.body;
   const id = req.params.game_id;
 
   const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
   if (game.phase !== 'actions') return res.status(400).json({ error: 'Pas en phase Actions' });
-  // ✅ Après
   if (Number(game.current_player_slot) !== Number(player_slot)) return res.status(400).json({ error: "Ce n'est pas ton tour" });
 
   const player = (await db.query("SELECT * FROM players WHERE game_id=$1 AND slot=$2", [id, player_slot])).rows[0];
   const event  = game.current_event;
 
-  // ── Action : Passer ──────────────────────────────────────
   if (action_type === 'pass') {
     await nextPlayer(id, game);
     await log(id, game.turn, `⏭ Joueur ${player_slot} passe son tour`);
     return res.json({ success: true });
   }
 
-  // ── Action : Upgrade ─────────────────────────────────────
   if (action_type === 'upgrade') {
     const building = (await db.query("SELECT * FROM buildings WHERE id=$1 AND game_id=$2", [building_id, id])).rows[0];
     if (!building) return res.status(404).json({ error: 'Bâtiment introuvable' });
     if (building.level >= 2) return res.status(400).json({ error: 'Déjà au niveau maximum' });
 
-    // Prérequis : Recherche Nv1 pour passer n'importe quoi au Nv2
-    // ✅ Après
-  if (Number(building.level) === 1 && building.type !== 'recherche') {
-    const recherche = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='recherche'", [id])).rows[0];
-    if (!recherche || Number(recherche.level) < 1) {
+    if (Number(building.level) === 1 && building.type !== 'recherche') {
+      const recherche = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='recherche'", [id])).rows[0];
+      if (!recherche || Number(recherche.level) < 1) {
         return res.status(400).json({ error: 'Le Centre de Recherche doit être Nv1 pour construire un Nv2' });
       }
     }
@@ -135,7 +125,6 @@ router.post('/:game_id/action', async (req, res) => {
     let cost = COSTS[building.type]?.[building.level] ?? 4;
     if (cost === 0) return res.status(400).json({ error: 'Ce bâtiment ne peut pas être amélioré' });
 
-    // Modificateurs événement
     if (event?.effect === 'upgrade_cost_plus1')  cost += 1;
     if (event?.effect === 'upgrade_cost_minus1' && building.level === 1) cost = Math.max(0, cost - 1);
 
@@ -144,7 +133,6 @@ router.post('/:game_id/action', async (req, res) => {
     await db.query("UPDATE buildings SET level=level+1, owner_slot=$1 WHERE id=$2", [player_slot, building_id]);
     await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [cost, id, player_slot]);
 
-    // Centrale Nv2 → +4 pollution immédiat
     if (building.type === 'centrale_nucleaire' && building.level === 1) {
       await db.query("UPDATE games SET fossil_level=2, pollution=LEAST(20,pollution+4) WHERE id=$1", [id]);
     }
@@ -154,7 +142,6 @@ router.post('/:game_id/action', async (req, res) => {
     return res.json({ success: true, new_level: building.level + 1, cost });
   }
 
-  // ── Action : Dépollution ─────────────────────────────────
   if (action_type === 'depollute') {
     const ecole = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='ecole'", [id])).rows[0];
     if (!ecole || ecole.level < 1) return res.status(400).json({ error: "L'École doit être au Niveau 1" });
@@ -168,7 +155,6 @@ router.post('/:game_id/action', async (req, res) => {
     await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [cost, id, player_slot]);
     await db.query("UPDATE games SET pollution=GREATEST(0,pollution-$1) WHERE id=$2", [reduction, id]);
 
-    // Désactiver free_depollute après usage
     if (isFree) {
       await db.query("UPDATE games SET current_event=current_event::jsonb - 'effect' WHERE id=$1", [id]);
     }
@@ -181,7 +167,6 @@ router.post('/:game_id/action', async (req, res) => {
   return res.status(400).json({ error: 'Action inconnue' });
 });
 
-// ── POST end-turn (Bilan environnemental) ────────────────────
 router.post('/:game_id/end-turn', async (req, res) => {
   const id = req.params.game_id;
   const game      = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
@@ -205,15 +190,11 @@ router.post('/:game_id/end-turn', async (req, res) => {
       if (event?.effect === 'green_plus1') prod += 1;
       green += prod;
     }
-    // Parc : réduit la pollution directement
     if (b.type === 'parc' && b.level > 0) {
-      const reduction = b.level;
-      await db.query("UPDATE games SET pollution=GREATEST(0,pollution-$1) WHERE id=$2", [reduction, id]);
+      await db.query("UPDATE games SET pollution=GREATEST(0,pollution-$1) WHERE id=$2", [b.level, id]);
     }
   }
 
-  // Centrale niveau 1 : consomme 1 énergie de base (demand += 1)
-  // Centrale niveau 2 : consomme 2 énergie de base (demand += 2)
   const centrale = buildings.find(b => b.type === 'centrale_nucleaire');
   const fossilBaseConsumption = centrale ? Number(centrale.level) : 0;
   demand += fossilBaseConsumption;
@@ -228,26 +209,23 @@ router.post('/:game_id/end-turn', async (req, res) => {
     blackout_excess = fossil_covers - maxFossil;
   }
 
-  const multiplier    = game.fossil_level >= 2 ? 2 : 1;
+  const multiplier       = game.fossil_level >= 2 ? 2 : 1;
   const effective_fossil = Math.min(fossil_covers, maxFossil);
-  const pollution_add = effective_fossil * multiplier;
-  const new_pollution = Math.min(20, game.pollution + pollution_add);
+  const pollution_add    = effective_fossil * multiplier;
+  const new_pollution    = Math.min(20, game.pollution + pollution_add);
 
   await db.query(
     "UPDATE games SET pollution=$1, turn=turn+1, phase='event', current_event=NULL WHERE id=$2",
     [new_pollution, id]
   );
 
-  // +3 crédits par joueur au début du tour suivant
   await db.query("UPDATE players SET credits=credits+3 WHERE game_id=$1", [id]);
 
-  // Bonus résidentiels : +1 cr/tour par résidentiel owned
   const residentiels = buildings.filter(b => b.type === 'residentiel' && b.owner_slot && b.level > 0);
   for (const r of residentiels) {
-    const bonus = r.level;
     await db.query(
       "UPDATE players SET credits=credits+$1 WHERE game_id=$2 AND slot=$3",
-      [bonus, id, r.owner_slot]
+      [r.level, id, r.owner_slot]
     );
   }
 
@@ -256,7 +234,6 @@ router.post('/:game_id/end-turn', async (req, res) => {
   const lost = new_pollution >= 20;
   if (lost) await db.query("UPDATE games SET status='lost' WHERE id=$1", [id]);
 
-  // ── Vérification victoire ────────────────────────────────
   const winners = await checkVictory(id);
   if (winners.length > 0) {
     await db.query("UPDATE games SET status='won' WHERE id=$1", [id]);
@@ -266,25 +243,45 @@ router.post('/:game_id/end-turn', async (req, res) => {
   }
 
   res.json({
-    demand,
-    green,
-    fossil_covers,
-    effective_fossil,
-    pollution_add,
-    new_pollution,
-    lost,
-    blackout,
-    blackout_excess,
+    demand, green, fossil_covers, effective_fossil,
+    pollution_add, new_pollution, lost,
+    blackout, blackout_excess,
     winners: winners.map(w => ({ pseudo: w.pseudo, role: w.role })),
   });
 });
-// ── POST depollute (legacy, garde pour compat) ───────────────
-router.post('/:game_id/depollute', async (req, res) => {
-  req.body.action_type = 'depollute';
-  return router.handle(req, res);
+
+router.post('/:game_id/dismantle', async (req, res) => {
+  const { player_slot } = req.body;
+  const id = req.params.game_id;
+
+  const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
+  if (game.phase !== 'actions') return res.status(400).json({ error: 'Pas en phase Actions' });
+  if (Number(game.current_player_slot) !== Number(player_slot)) return res.status(400).json({ error: "Ce n'est pas ton tour" });
+
+  const players = (await db.query("SELECT * FROM players WHERE game_id=$1", [id])).rows;
+  const totalCredits = players.reduce((sum, p) => sum + p.credits, 0);
+
+  if (totalCredits < 16) return res.status(400).json({ error: `Crédits collectifs insuffisants (${totalCredits}/16 cr)` });
+
+  let remaining = 16;
+  for (const p of players) {
+    const contribution = Math.min(p.credits, remaining);
+    if (contribution > 0) {
+      await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [contribution, id, p.slot]);
+      remaining -= contribution;
+    }
+    if (remaining <= 0) break;
+  }
+
+  await db.query("UPDATE buildings SET level=0, owner_slot=NULL WHERE game_id=$1 AND type='centrale_nucleaire'", [id]);
+  await db.query("UPDATE games SET fossil_level=0, pollution=0 WHERE id=$1", [id]);
+
+  await log(id, game.turn, `💥 La Centrale Fossile a été démantelée ! Pollution remise à 0.`);
+  await nextPlayer(id, game);
+
+  res.json({ success: true });
 });
 
-// ── Helpers ──────────────────────────────────────────────────
 async function nextPlayer(game_id, game) {
   const players = (await db.query("SELECT * FROM players WHERE game_id=$1 ORDER BY slot", [game_id])).rows;
   const slots   = players.map(p => p.slot);
@@ -292,7 +289,6 @@ async function nextPlayer(game_id, game) {
   const next    = slots[idx + 1];
 
   if (!next) {
-    // Tous les joueurs ont joué → Bilan
     await db.query("UPDATE games SET phase='bilan', current_player_slot=NULL WHERE id=$1", [game_id]);
     await log(game_id, game.turn, '⚖️ Tous les joueurs ont joué → Phase Bilan');
   } else {
@@ -307,17 +303,14 @@ async function log(game_id, turn, message) {
   );
 }
 
-// ── Vérification des objectifs ───────────────────────────────
 async function checkVictory(game_id) {
-  const game     = (await db.query("SELECT * FROM games WHERE id=$1", [game_id])).rows[0];
-  const players  = (await db.query("SELECT * FROM players WHERE game_id=$1", [game_id])).rows;
-  const buildings= (await db.query("SELECT * FROM buildings WHERE game_id=$1", [game_id])).rows;
+  const game      = (await db.query("SELECT * FROM games WHERE id=$1", [game_id])).rows[0];
+  const players   = (await db.query("SELECT * FROM players WHERE game_id=$1", [game_id])).rows;
+  const buildings = (await db.query("SELECT * FROM buildings WHERE game_id=$1", [game_id])).rows;
 
-  const pollution = game.pollution;
-
-  // Helpers
-  const bldg = (type) => buildings.filter(b => b.type === type);
-  const lvl  = (type, minLevel) => buildings.some(b => b.type === type && b.level >= minLevel);
+  const pollution  = game.pollution;
+  const bldg       = (type) => buildings.filter(b => b.type === type);
+  const lvl        = (type, minLevel) => buildings.some(b => b.type === type && b.level >= minLevel);
   const greenCount = buildings.filter(b => ['eolienne','solaire'].includes(b.type) && b.level >= 1).length;
   const fossilLevel = buildings.find(b => b.type === 'centrale_nucleaire')?.level ?? 0;
   const dismantled  = fossilLevel === 0;
@@ -326,103 +319,26 @@ async function checkVictory(game_id) {
 
   for (const p of players) {
     let won = false;
-
     switch(p.role) {
-      case 'scientist':
-        won = lvl('recherche',2) && lvl('hopital',2);
-        break;
-      case 'ecologist':
-        won = greenCount >= 4 && pollution < 3;
-        break;
-      case 'industrialist':
-        won = fossilLevel >= 2 && pollution > 15;
-        break;
-      case 'mayor':
-        won = lvl('hopital',1) && lvl('ecole',1) && lvl('recherche',1);
-        break;
-      case 'urbanist':
-        won = bldg('residentiel').filter(b => b.level >= 1).length >= 3 && lvl('ecole',2);
-        break;
-      case 'head_doctor':
-        won = lvl('hopital',2) && pollution < 5;
-        break;
-      case 'engineer':
-        won = greenCount >= 4 && dismantled;
-        break;
-      case 'banker':
-        won = p.credits >= 12 && bldg('residentiel').some(b => b.level >= 2 && b.owner_slot === p.slot);
-        break;
-      case 'activist':
-        won = fossilLevel <= 1 && pollution === 0;
-        break;
-      case 'developer':
-        won = bldg('residentiel').filter(b => b.level >= 2 && b.owner_slot === p.slot).length >= 2;
-        break;
-      case 'technocrat':
-        won = lvl('recherche',2) && greenCount >= 3 && fossilLevel <= 1;
-        break;
-      case 'lobbyist':
-        won = fossilLevel >= 2 && bldg('residentiel').filter(b => b.level >= 1).length >= 2 && pollution > 10 && pollution < 15;
-        break;
-      case 'union_leader':
-        won = lvl('hopital',2) && fossilLevel >= 2;
-        break;
-      case 'visionary':
-        won = lvl('recherche',2) && bldg('residentiel').some(b => b.level >= 2 && b.owner_slot === p.slot) && greenCount >= 1;
-        break;
+      case 'scientist':    won = lvl('recherche',2) && lvl('hopital',2); break;
+      case 'ecologist':    won = greenCount >= 4 && pollution < 3; break;
+      case 'industrialist':won = fossilLevel >= 2 && pollution > 15; break;
+      case 'mayor':        won = lvl('hopital',1) && lvl('ecole',1) && lvl('recherche',1); break;
+      case 'urbanist':     won = bldg('residentiel').filter(b => b.level >= 1).length >= 3 && lvl('ecole',2); break;
+      case 'head_doctor':  won = lvl('hopital',2) && pollution < 5; break;
+      case 'engineer':     won = greenCount >= 4 && dismantled; break;
+      case 'banker':       won = p.credits >= 12 && bldg('residentiel').some(b => b.level >= 2 && b.owner_slot === p.slot); break;
+      case 'activist':     won = fossilLevel <= 1 && pollution === 0; break;
+      case 'developer':    won = bldg('residentiel').filter(b => b.level >= 2 && b.owner_slot === p.slot).length >= 2; break;
+      case 'technocrat':   won = lvl('recherche',2) && greenCount >= 3 && fossilLevel <= 1; break;
+      case 'lobbyist':     won = fossilLevel >= 2 && bldg('residentiel').filter(b => b.level >= 1).length >= 2 && pollution > 10 && pollution < 15; break;
+      case 'union_leader': won = lvl('hopital',2) && fossilLevel >= 2; break;
+      case 'visionary':    won = lvl('recherche',2) && bldg('residentiel').some(b => b.level >= 2 && b.owner_slot === p.slot) && greenCount >= 1; break;
     }
-
     if (won) winners.push(p);
   }
 
   return winners;
 }
-router.get('/reconnect/:pseudo', async (req, res) => {
-  const { pseudo } = req.params;
-  const player = await db.query(
-    "SELECT * FROM players WHERE pseudo=$1", [pseudo]
-  );
-  if (!player.rows[0]) return res.status(404).json({ error: 'Joueur introuvable' });
 
-  const p = player.rows[0];
-  const game = await db.query("SELECT * FROM games WHERE id=$1", [p.game_id]);
-  if (!game.rows[0] || game.rows[0].status === 'waiting') {
-    return res.status(404).json({ error: 'Pas de partie en cours' });
-  }
-
-  res.json({ player: p, game: game.rows[0] });
-});
-router.post('/:game_id/dismantle', async (req, res) => {
-  const { player_slot } = req.body;
-  const id = req.params.game_id;
-
-  const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
-  if (game.phase !== 'actions') return res.status(400).json({ error: 'Pas en phase Actions' });
-  if (Number(game.current_player_slot) !== Number(player_slot)) return res.status(400).json({ error: "Ce n'est pas ton tour" });
-
-  const players = (await db.query("SELECT * FROM players WHERE game_id=$1", [id])).rows;
-  const totalCredits = players.reduce((sum, p) => sum + p.credits, 0);
-
-  if (totalCredits < 16) return res.status(400).json({ error: `Crédits collectifs insuffisants (${totalCredits}/16 cr)` });
-
-  // Déduit les crédits proportionnellement
-  let remaining = 16;
-  for (const p of players) {
-    const contribution = Math.min(p.credits, remaining);
-    if (contribution > 0) {
-      await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [contribution, id, p.slot]);
-      remaining -= contribution;
-    }
-    if (remaining <= 0) break;
-  }
-
-  // Démantèle la centrale
-  await db.query("UPDATE buildings SET level=0, owner_slot=NULL WHERE game_id=$1 AND type='centrale_nucleaire'", [id]);
-  await db.query("UPDATE games SET fossil_level=0, pollution=0 WHERE id=$1", [id]);
-
-  await log(id, game.turn, `💥 La Centrale Fossile a été démantelée ! Pollution remise à 0.`);
-  await nextPlayer(id, game);
-
-  res.json({ success: true });
-});
 module.exports = router;
