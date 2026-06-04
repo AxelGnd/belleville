@@ -595,19 +595,70 @@ function showBuildMenu() {
   const buildings = Object.values(window._buildingsData || {});
   const me = window._playersData?.find(p => p.slot === state.player_slot);
 
-  const rows = buildings.map(b => {
-    const costs = { hopital:[5,8], ecole:[5,8], recherche:[6,10], residentiel:[4,8], eolienne:[4,0], solaire:[4,0], parc:[13,20], centrale_nucleaire:[0,4] };
-    const cost = costs[b.type]?.[b.level];
-    const canBuild = cost && cost > 0 && b.level < 2;
-    const affordable = me && me.credits >= cost;
+  // Regroupe les bâtiments par type
+  const grouped = {};
+  for (const b of buildings) {
+    if (!grouped[b.type]) grouped[b.type] = [];
+    grouped[b.type].push(b);
+  }
+
+  const costs = {
+    hopital:            [5, 8],
+    ecole:              [5, 8],
+    recherche:          [6, 10],
+    residentiel:        [4, 8],
+    eolienne:           [4, 6],
+    solaire:            [4, 6],
+    parc:               [13, 20],
+    centrale_nucleaire: [0, 4],
+  };
+
+  const rows = Object.entries(grouped).map(([type, list]) => {
+    // Trouve le premier bâtiment upgradeable de ce type
+    const upgradeable = list.find(b => b.level < 2 && (costs[type]?.[b.level] ?? 0) > 0);
+    const allMax = list.every(b => b.level >= 2);
+    const count  = list.length;
+    const lvl0   = list.filter(b => b.level === 0).length;
+    const lvl1   = list.filter(b => b.level === 1).length;
+    const lvl2   = list.filter(b => b.level === 2).length;
+
+    const cost = upgradeable ? costs[type]?.[upgradeable.level] : null;
+    const affordable = me && cost && me.credits >= cost;
+
+    // Label du statut
+    let statusLabel = '';
+    if (count > 1) {
+      const parts = [];
+      if (lvl0 > 0) parts.push(`${lvl0}×Lv0`);
+      if (lvl1 > 0) parts.push(`${lvl1}×Lv1`);
+      if (lvl2 > 0) parts.push(`${lvl2}×Lv2`);
+      statusLabel = parts.join(' · ');
+    } else {
+      statusLabel = `Level ${list[0].level}`;
+    }
+
     return `
-      <div class="building-row" style="opacity:${canBuild ? 1 : 0.4}">
-        <span class="b-icon">${BUILDING_ICONS[b.type] || '🏗'}</span>
-        <div class="b-info">
-          <div class="b-name">${BUILDING_NAMES[b.type]} Nv${b.level} → Nv${b.level + 1}</div>
-          <div class="b-meta">💰 ${cost ?? '—'} cr ${!affordable && canBuild ? '<span style="color:#ef4444">· insuffisant</span>' : ''}</div>
+      <div class="build-row ${allMax ? 'max' : ''}">
+        <div class="build-left">
+          <span class="build-icon">${BUILDING_ICONS[type] || '🏗'}</span>
+          <div class="build-info">
+            <div class="build-name">${BUILDING_NAMES[type] || type}</div>
+            <div class="build-status">${statusLabel}</div>
+          </div>
         </div>
-        ${canBuild ? `<button class="btn btn-primary" style="width:auto;padding:6px 12px;margin:0;font-size:12px;${!affordable?'opacity:.4':''}" ${!affordable?'disabled':''} onclick="doAction('upgrade',${b.id});closeModal()">Améliorer</button>` : '<span style="font-size:11px;color:#6b7280">Max</span>'}
+        <div class="build-right">
+          ${allMax
+            ? `<span class="build-max">✅ Max</span>`
+            : upgradeable
+              ? `<div class="build-cost">💰 ${cost} cr</div>
+                 <button class="build-btn ${!affordable ? 'disabled' : ''}"
+                   ${!affordable ? 'disabled' : ''}
+                   onclick="doAction('upgrade',${upgradeable.id});closeModal()">
+                   Lv${upgradeable.level}→${upgradeable.level + 1}
+                 </button>`
+              : `<span class="build-max" style="color:#6b7280">—</span>`
+          }
+        </div>
       </div>
     `;
   }).join('');
@@ -617,9 +668,12 @@ function showBuildMenu() {
   modal.innerHTML = `
     <div class="modal-sheet">
       <div class="modal-handle"></div>
-      <h2 style="margin-bottom:1rem">Construire / Améliorer</h2>
-      ${rows}
-      <button class="btn btn-secondary" style="margin-top:1rem" onclick="closeModal()">Fermer</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+        <h2 style="margin:0">Build / Upgrade</h2>
+        <span style="font-size:13px;color:#9ca3af">💰 ${me?.credits ?? 0} cr</span>
+      </div>
+      <div class="build-list">${rows}</div>
+      <button class="btn btn-secondary" style="margin-top:1rem" onclick="closeModal()">Close</button>
     </div>
   `;
   modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });

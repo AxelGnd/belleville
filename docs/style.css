@@ -587,3 +587,66 @@ select option { background: #1e2d3d; }
   margin-bottom: 12px;
   border: 1px solid;
 }
+/* Build menu */
+.build-list { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow-y: auto; }
+
+.build-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #0f1923;
+  border: 1px solid #2d3f50;
+  border-radius: 10px;
+  gap: 8px;
+}
+
+.build-row.max { opacity: .5; }
+
+.build-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.build-icon { font-size: 22px; flex-shrink: 0; }
+
+.build-info { min-width: 0; }
+.build-name {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.build-status { font-size: 11px; color: #6b7280; margin-top: 2px; }
+
+.build-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.build-cost { font-size: 11px; color: #9ca3af; }
+
+.build-btn {
+  background: #22c55e;
+  color: #0f1923;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s;
+}
+
+.build-btn:hover { background: #16a34a; }
+.build-btn.disabled { background: #2d3f50; color: #6b7280; cursor: not-allowed; }
+
+.build-max { font-size: 12px; color: #22c55e; }
