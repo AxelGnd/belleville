@@ -247,7 +247,8 @@ function showWheelAnimation(availableRoles, takenRoles) {
   }, 4500);
 }
 async function joinWithRole(roleId) {
-  state.role = roleId;
+  state.role = roleId; // ← déjà là
+  console.log('Role set:', state.role); // ajoutez ça pour debug
 
   const res = await fetch(`${API}/players/join`, {
     method: 'POST',
@@ -349,6 +350,11 @@ function pollColor(p) {
 
 function renderGame(data) {
   const { game, players, buildings, logs } = data;
+  if (!state.role && state.player_slot) {
+    const meFromServer = players.find(p => p.slot === state.player_slot);
+    if (meFromServer) state.role = meFromServer.role;
+  }
+  
   const myRole = ROLES.find(r => r.id === state.role);
   const me = players.find(p => p.slot === state.player_slot);
   const pct   = (game.pollution / 20) * 100;
