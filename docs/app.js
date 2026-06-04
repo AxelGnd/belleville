@@ -633,24 +633,24 @@ function showBuildMenu() {
       </div>`;
 
     const btn0 = canBuy0 ? `
-      <div style="text-align:center">
-        <div class="build-cost">💰 ${cost0} cr</div>
-        <button class="build-btn ${me?.credits < cost0 ? 'disabled':''}"
-          ${me?.credits < cost0 ? 'disabled':''}
-          onclick="doAction('upgrade',${hasLv0.id});closeModal()">
-          Lv 0 → 1
-        </button>
-      </div>` : '';
+  <div style="text-align:center">
+    <div class="build-cost">💰 ${cost0} cr</div>
+    <button class="build-btn ${me?.credits < cost0 ? 'disabled':''}"
+      ${me?.credits < cost0 ? 'disabled':''}
+      onclick="doAction('upgrade',${hasLv0.id});closeModal()">
+      Lv 0→1
+    </button>
+  </div>` : '';
 
     const btn1 = canBuy1 ? `
-      <div style="text-align:center">
-        <div class="build-cost">💰 ${cost1} cr</div>
-        <button class="build-btn ${me?.credits < cost1 ? 'disabled':''}"
-          ${me?.credits < cost1 ? 'disabled':''}
-          onclick="doAction('upgrade',${hasLv1.id});closeModal()">
-          Lv 1 → 2
-        </button>
-      </div>` : '';
+  <div style="text-align:center">
+    <div class="build-cost">💰 ${cost1} cr</div>
+    <button class="build-btn ${me?.credits < cost1 ? 'disabled':''}"
+      ${me?.credits < cost1 ? 'disabled':''}
+      onclick="doAction('upgrade',${hasLv1.id});closeModal()">
+      Lv 1→2
+    </button>
+  </div>` : '';
 
     return `
       <div class="build-row">
