@@ -243,14 +243,33 @@ router.post('/:game_id/end-turn', async (req, res) => {
     );
   }
 
-  await log(id, game.turn, `📊 Bilan : demande ${demand}, vert ${green}, fossile ${effective_fossil}, +${pollution_add} pollution`);
+  await log(game_id, game.turn, `📊 Bilan : demande ${demand}, vert ${green}, fossile ${effective_fossil}, +${pollution_add} pollution`);
 
   const lost = new_pollution >= 20;
   if (lost) await db.query("UPDATE games SET status='lost' WHERE id=$1", [id]);
 
-  res.json({ demand, green, fossil_covers, effective_fossil, pollution_add, new_pollution, lost, blackout, blackout_excess });
-});
+  // ── Vérification victoire ────────────────────────────────
+  const winners = await checkVictory(id);
+  if (winners.length > 0) {
+    await db.query("UPDATE games SET status='won' WHERE id=$1", [id]);
+    for (const w of winners) {
+      await log(id, game.turn, `🏆 ${w.pseudo} a gagné avec le rôle ${w.role} !`);
+    }
+  }
 
+  res.json({
+    demand,
+    green,
+    fossil_covers,
+    effective_fossil,
+    pollution_add,
+    new_pollution,
+    lost,
+    blackout,
+    blackout_excess,
+    winners: winners.map(w => ({ pseudo: w.pseudo, role: w.role })),
+  });
+});
 // ── POST depollute (legacy, garde pour compat) ───────────────
 router.post('/:game_id/depollute', async (req, res) => {
   req.body.action_type = 'depollute';
@@ -280,4 +299,74 @@ async function log(game_id, turn, message) {
   );
 }
 
+// ── Vérification des objectifs ───────────────────────────────
+async function checkVictory(game_id) {
+  const game     = (await db.query("SELECT * FROM games WHERE id=$1", [game_id])).rows[0];
+  const players  = (await db.query("SELECT * FROM players WHERE game_id=$1", [game_id])).rows;
+  const buildings= (await db.query("SELECT * FROM buildings WHERE game_id=$1", [game_id])).rows;
+
+  const pollution = game.pollution;
+
+  // Helpers
+  const bldg = (type) => buildings.filter(b => b.type === type);
+  const lvl  = (type, minLevel) => buildings.some(b => b.type === type && b.level >= minLevel);
+  const greenCount = buildings.filter(b => ['eolienne','solaire'].includes(b.type) && b.level >= 1).length;
+  const fossilLevel = buildings.find(b => b.type === 'centrale_nucleaire')?.level ?? 0;
+  const dismantled  = fossilLevel === 0;
+
+  const winners = [];
+
+  for (const p of players) {
+    let won = false;
+
+    switch(p.role) {
+      case 'scientist':
+        won = lvl('recherche',2) && lvl('hopital',2);
+        break;
+      case 'ecologist':
+        won = greenCount >= 4 && pollution < 3;
+        break;
+      case 'industrialist':
+        won = fossilLevel >= 2 && pollution > 15;
+        break;
+      case 'mayor':
+        won = lvl('hopital',1) && lvl('ecole',1) && lvl('recherche',1);
+        break;
+      case 'urbanist':
+        won = bldg('residentiel').filter(b => b.level >= 1).length >= 3 && lvl('ecole',2);
+        break;
+      case 'head_doctor':
+        won = lvl('hopital',2) && pollution < 5;
+        break;
+      case 'engineer':
+        won = greenCount >= 4 && dismantled;
+        break;
+      case 'banker':
+        won = p.credits >= 12 && bldg('residentiel').some(b => b.level >= 2 && b.owner_slot === p.slot);
+        break;
+      case 'activist':
+        won = fossilLevel <= 1 && pollution === 0;
+        break;
+      case 'developer':
+        won = bldg('residentiel').filter(b => b.level >= 2 && b.owner_slot === p.slot).length >= 2;
+        break;
+      case 'technocrat':
+        won = lvl('recherche',2) && greenCount >= 3 && fossilLevel <= 1;
+        break;
+      case 'lobbyist':
+        won = fossilLevel >= 2 && bldg('residentiel').filter(b => b.level >= 1).length >= 2 && pollution > 10 && pollution < 15;
+        break;
+      case 'union_leader':
+        won = lvl('hopital',2) && fossilLevel >= 2;
+        break;
+      case 'visionary':
+        won = lvl('recherche',2) && bldg('residentiel').some(b => b.level >= 2 && b.owner_slot === p.slot) && greenCount >= 1;
+        break;
+    }
+
+    if (won) winners.push(p);
+  }
+
+  return winners;
+}
 module.exports = router;

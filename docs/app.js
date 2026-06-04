@@ -618,8 +618,10 @@ function showBuildMenu() {
     const hasLv1 = list.find(b => b.level === 1);
     const cost0  = costs[type]?.[0] ?? 0;
     const cost1  = costs[type]?.[1] ?? 0;
+    const recherche = buildings.find(b => b.type === 'recherche');
+    const rechercheOk = recherche && recherche.level >= 1;
     const canBuy0 = hasLv0 && cost0 > 0;
-    const canBuy1 = hasLv1 && cost1 > 0;
+    const canBuy1 = hasLv1 && cost1 > 0 && (type === 'recherche' || rechercheOk);
 
     if (!canBuy0 && !canBuy1) return `
       <div class="build-row max">
@@ -686,6 +688,12 @@ async function endTurn() {
   const res  = await fetch(`${API}/game/${state.game_id}/end-turn`, { method: 'POST' });
   const data = await res.json();
   if (!res.ok) return alert(data.error);
+
+
+  if (data.winners && data.winners.length > 0) {
+    showEndScreen(true, data.winners);
+    return;
+  }
 
   if (data.lost) {
     alert('💀 Défaite ! La pollution a atteint 20. La ville est perdue.');
@@ -800,5 +808,50 @@ function closeModal() {
     window._currentModal.remove();
     window._currentModal = null;
   }
+}
+function showEndScreen(won, winners) {
+  stopPolling();
+
+  if (won) {
+    const winnerCards = winners.map(w => {
+      const role = ROLES.find(r => r.id === w.role);
+      return `
+        <div style="
+          background:#14532d22;
+          border:1px solid #22c55e44;
+          border-radius:12px;
+          padding:1.25rem;
+          margin-bottom:10px;
+          text-align:center;
+        ">
+          <div style="font-size:48px;margin-bottom:8px">${role?.icon || '🏆'}</div>
+          <div style="font-size:20px;font-weight:800;margin-bottom:4px">${w.pseudo}</div>
+          <div style="font-size:14px;color:#22c55e;font-weight:600">${role?.name || w.role}</div>
+          <div style="font-size:12px;color:#9ca3af;margin-top:6px">${role?.desc || ''}</div>
+        </div>
+      `;
+    }).join('');
+
+    show(`
+      <div style="text-align:center;padding:2rem 0">
+        <div style="font-size:64px;margin-bottom:1rem">🏆</div>
+        <h1 style="color:#22c55e;margin-bottom:0.5rem">Victory!</h1>
+        <p style="margin-bottom:2rem">A player has completed their secret objective!</p>
+        ${winnerCards}
+        <button class="btn btn-secondary" style="margin-top:1rem" onclick="renderWelcome()">New game</button>
+      </div>
+    `);
+  } else {
+    show(`
+      <div style="text-align:center;padding:2rem 0">
+        <div style="font-size:64px;margin-bottom:1rem">💀</div>
+        <h1 style="color:#ef4444;margin-bottom:0.5rem">Defeat!</h1>
+        <p style="margin-bottom:2rem">Pollution reached 20. The city is lost.</p>
+        <button class="btn btn-secondary" onclick="renderWelcome()">New game</button>
+      </div>
+    `);
+  }
+
+  socket.emit('game_update', { game_id: state.game_id });
 }
 renderWelcome();
