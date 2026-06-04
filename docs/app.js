@@ -841,10 +841,9 @@ async function dismantle() {
 }
 
 (async () => {
-  try {
-    const reconnected = await tryReconnect();
-    if (!reconnected) renderWelcome();
-  } catch(e) {
+  const restored = await tryReconnect();
+
+  if (!restored) {
     renderWelcome();
   }
 })();
