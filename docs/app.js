@@ -595,13 +595,6 @@ function showBuildMenu() {
   const buildings = Object.values(window._buildingsData || {});
   const me = window._playersData?.find(p => p.slot === state.player_slot);
 
-  // Regroupe les bâtiments par type
-  const grouped = {};
-  for (const b of buildings) {
-    if (!grouped[b.type]) grouped[b.type] = [];
-    grouped[b.type].push(b);
-  }
-
   const costs = {
     hopital:            [5, 8],
     ecole:              [5, 8],
@@ -613,54 +606,62 @@ function showBuildMenu() {
     centrale_nucleaire: [0, 4],
   };
 
+  // Regroupe par type
+  const grouped = {};
+  for (const b of buildings) {
+    if (!grouped[b.type]) grouped[b.type] = [];
+    grouped[b.type].push(b);
+  }
+
   const rows = Object.entries(grouped).map(([type, list]) => {
-    // Trouve le premier bâtiment upgradeable de ce type
-    const upgradeable = list.find(b => b.level < 2 && (costs[type]?.[b.level] ?? 0) > 0);
-    const allMax = list.every(b => b.level >= 2);
-    const count  = list.length;
-    const lvl0   = list.filter(b => b.level === 0).length;
-    const lvl1   = list.filter(b => b.level === 1).length;
-    const lvl2   = list.filter(b => b.level === 2).length;
+    const hasLv0 = list.find(b => b.level === 0);
+    const hasLv1 = list.find(b => b.level === 1);
+    const cost0  = costs[type]?.[0] ?? 0;
+    const cost1  = costs[type]?.[1] ?? 0;
+    const canBuy0 = hasLv0 && cost0 > 0;
+    const canBuy1 = hasLv1 && cost1 > 0;
 
-    const cost = upgradeable ? costs[type]?.[upgradeable.level] : null;
-    const affordable = me && cost && me.credits >= cost;
-
-    // Label du statut
-    let statusLabel = '';
-    if (count > 1) {
-      const parts = [];
-      if (lvl0 > 0) parts.push(`${lvl0}×Lv0`);
-      if (lvl1 > 0) parts.push(`${lvl1}×Lv1`);
-      if (lvl2 > 0) parts.push(`${lvl2}×Lv2`);
-      statusLabel = parts.join(' · ');
-    } else {
-      statusLabel = `Level ${list[0].level}`;
-    }
-
-    return `
-      <div class="build-row ${allMax ? 'max' : ''}">
+    if (!canBuy0 && !canBuy1) return `
+      <div class="build-row max">
         <div class="build-left">
-          <span class="build-icon">${BUILDING_ICONS[type] || '🏗'}</span>
+          <span class="build-icon">${BUILDING_ICONS[type]||'🏗'}</span>
           <div class="build-info">
-            <div class="build-name">${BUILDING_NAMES[type] || type}</div>
-            <div class="build-status">${statusLabel}</div>
+            <div class="build-name">${BUILDING_NAMES[type]||type}</div>
+            <div class="build-status" style="color:#22c55e">✅ All maxed</div>
           </div>
         </div>
-        <div class="build-right">
-          ${allMax
-            ? `<span class="build-max">✅ Max</span>`
-            : upgradeable
-              ? `<div class="build-cost">💰 ${cost} cr</div>
-                 <button class="build-btn ${!affordable ? 'disabled' : ''}"
-                   ${!affordable ? 'disabled' : ''}
-                   onclick="doAction('upgrade',${upgradeable.id});closeModal()">
-                   Lv${upgradeable.level}→${upgradeable.level + 1}
-                 </button>`
-              : `<span class="build-max" style="color:#6b7280">—</span>`
-          }
+      </div>`;
+
+    const btn0 = canBuy0 ? `
+      <div style="text-align:center">
+        <div class="build-cost">💰 ${cost0} cr</div>
+        <button class="build-btn ${me?.credits < cost0 ? 'disabled':''}"
+          ${me?.credits < cost0 ? 'disabled':''}
+          onclick="doAction('upgrade',${hasLv0.id});closeModal()">
+          Lv 0 → 1
+        </button>
+      </div>` : '';
+
+    const btn1 = canBuy1 ? `
+      <div style="text-align:center">
+        <div class="build-cost">💰 ${cost1} cr</div>
+        <button class="build-btn ${me?.credits < cost1 ? 'disabled':''}"
+          ${me?.credits < cost1 ? 'disabled':''}
+          onclick="doAction('upgrade',${hasLv1.id});closeModal()">
+          Lv 1 → 2
+        </button>
+      </div>` : '';
+
+    return `
+      <div class="build-row">
+        <div class="build-left">
+          <span class="build-icon">${BUILDING_ICONS[type]||'🏗'}</span>
+          <div class="build-name">${BUILDING_NAMES[type]||type}</div>
         </div>
-      </div>
-    `;
+        <div style="display:flex;gap:8px">
+          ${btn0}${btn1}
+        </div>
+      </div>`;
   }).join('');
 
   const modal = document.createElement('div');
