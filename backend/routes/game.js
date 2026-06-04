@@ -3,17 +3,17 @@ const router  = express.Router();
 const db      = require('../db/connection');
 
 const EVENTS = [
-  { id:'cold_wave',      type:'crisis',      title:'Vague de Froid',           desc:'Tous les Résidentiels consomment +1 énergie ce tour.',   effect:'demand_plus1_residential' },
-  { id:'toxic_leak',     type:'crisis',      title:'Fuite Toxique',            desc:'Avancez la Pollution de 2 cases immédiatement.',         effect:'pollution_plus2' },
-  { id:'shortage',       type:'crisis',      title:'Pénurie de Matériaux',     desc:'Améliorer un bâtiment coûte +1 CR ce tour.',             effect:'upgrade_cost_plus1' },
-  { id:'no_wind',        type:'crisis',      title:'Ciel Couvert',             desc:'Les Énergies Vertes produisent 0 énergie ce tour.',      effect:'green_zero' },
-  { id:'health_crisis',  type:'crisis',      title:'Crise Respiratoire',       desc:'Chaque joueur perd 2 CR.',                               effect:'all_lose2cr', protected_by:'hopital_2' },
-  { id:'subsidy',        type:'opportunity', title:'Subventions Européennes',  desc:'Chaque joueur reçoit +2 CR.',                            effect:'all_gain2cr' },
-  { id:'tech_advance',   type:'opportunity', title:'Avancée Technologique',    desc:'Améliorer vers Nv2 coûte 1 CR de moins ce tour.',        effect:'upgrade_cost_minus1' },
-  { id:'earth_day',      type:'opportunity', title:'Journée de la Terre',      desc:'La prochaine Dépollution est gratuite ce tour.',         effect:'free_depollute' },
-  { id:'sunny_day',      type:'opportunity', title:'Journée Ensoleillée',      desc:'Les Énergies Vertes produisent 1 énergie de plus.',      effect:'green_plus1' },
-  { id:'elections',      type:'neutral',     title:'Élections Municipales',    desc:'Si aucun Grand Projet ce tour : +1 Pollution.',          effect:'elections' },
-  { id:'audit',          type:'neutral',     title:'Audit Écologique',         desc:'Centrale Nv2 → +2 Pollution. Centrale Nv1 → -1.',       effect:'audit' },
+  { id:'cold_wave',     type:'crisis',       title:'Cold Wave',              desc:'All Residential buildings consume +1 Energy this turn.',  effect:'demand_plus1_residential' },
+  { id:'toxic_leak',    type:'crisis',       title:'Toxic Leak',             desc:'+2 Pollution immediately.',                               effect:'pollution_plus2' },
+  { id:'shortage',      type:'crisis',       title:'Material Shortage',      desc:'Upgrading costs +1 CR this turn.',                        effect:'upgrade_cost_plus1' },
+  { id:'no_wind',       type:'crisis',       title:'Cloudy & No Wind',       desc:'Green Energy produces 0 this turn.',                      effect:'green_zero' },
+  { id:'health_crisis', type:'crisis',       title:'Respiratory Crisis',     desc:'Each player loses 2 CR.',                                 effect:'all_lose2cr' },
+  { id:'subsidy',       type:'opportunity',  title:'European Subsidies',     desc:'Each player receives +2 CR.',                             effect:'all_gain2cr' },
+  { id:'tech_advance',  type:'opportunity',  title:'Tech Breakthrough',      desc:'Upgrading to Lv2 costs 1 CR less this turn.',             effect:'upgrade_cost_minus1' },
+  { id:'earth_day',     type:'opportunity',  title:'Earth Day',              desc:'Next depollution this turn is free.',                     effect:'free_depollute' },
+  { id:'sunny_day',     type:'opportunity',  title:'Sunny Day',              desc:'Green Energy produces +1 extra this turn.',               effect:'green_plus1' },
+  { id:'elections',     type:'neutral',      title:'Municipal Elections',    desc:'No Grand Project this turn: +1 Pollution.',               effect:'elections' },
+  { id:'audit',         type:'neutral',      title:'Ecological Audit',       desc:'Fossil Lv2: +2 Poll. Fossil Lv1: -1 Poll.',              effect:'audit' },
 ];
 
 const COSTS = {
@@ -21,267 +21,251 @@ const COSTS = {
   ecole:              [5, 8],
   recherche:          [6, 10],
   residentiel:        [4, 8],
-  eolienne:           [4, 0],
-  solaire:            [4, 0],
+  eolienne:           [4, 6],
+  solaire:            [4, 6],
   parc:               [13, 20],
   centrale_nucleaire: [0, 4],
 };
 
+// ── GET state ────────────────────────────────────────────────
 router.get('/:game_id/state', async (req, res) => {
-  const id = req.params.game_id;
-  const [game, players, buildings, logs] = await Promise.all([
-    db.query("SELECT * FROM games WHERE id=$1", [id]),
-    db.query("SELECT * FROM players WHERE game_id=$1 ORDER BY slot", [id]),
-    db.query("SELECT * FROM buildings WHERE game_id=$1", [id]),
-    db.query("SELECT * FROM game_log WHERE game_id=$1 ORDER BY id DESC LIMIT 20", [id]),
-  ]);
-  res.json({
-    game:      game.rows[0],
-    players:   players.rows,
-    buildings: buildings.rows,
-    logs:      logs.rows,
-  });
+  try {
+    const id = req.params.game_id;
+    const [game, players, buildings, logs] = await Promise.all([
+      db.query("SELECT * FROM games WHERE id=$1", [id]),
+      db.query("SELECT * FROM players WHERE game_id=$1 ORDER BY slot", [id]),
+      db.query("SELECT * FROM buildings WHERE game_id=$1", [id]),
+      db.query("SELECT * FROM game_log WHERE game_id=$1 ORDER BY id DESC LIMIT 20", [id]),
+    ]);
+    res.json({
+      game:      game.rows[0],
+      players:   players.rows,
+      buildings: buildings.rows,
+      logs:      logs.rows,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
+// ── POST start ───────────────────────────────────────────────
 router.post('/:game_id/start', async (req, res) => {
-  const id = req.params.game_id;
-  await db.query(
-    "UPDATE games SET status='playing', phase='event', current_player_slot=1, turn=1 WHERE id=$1",
-    [id]
-  );
-  await log(id, 1, '🏙 La partie commence ! Phase : Événement');
-  res.json({ success: true });
+  try {
+    const id = req.params.game_id;
+    await db.query(
+      "UPDATE games SET status='playing', phase='event', current_player_slot=1, turn=1 WHERE id=$1",
+      [id]
+    );
+    await addLog(id, 1, '🏙 Game started! Phase: Event');
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
+// ── POST draw-event ──────────────────────────────────────────
 router.post('/:game_id/draw-event', async (req, res) => {
-  const id = req.params.game_id;
-  const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
+  try {
+    const id   = req.params.game_id;
+    const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
 
-  if (game.phase !== 'event') return res.status(400).json({ error: 'Pas en phase Événement' });
+    if (game.phase !== 'event') return res.status(400).json({ error: 'Not in Event phase' });
 
-  const event = EVENTS[Math.floor(Math.random() * EVENTS.length)];
+    const event = EVENTS[Math.floor(Math.random() * EVENTS.length)];
 
-  if (event.effect === 'pollution_plus2') {
-    const hopital = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='hopital'", [id])).rows[0];
-    const amount = hopital?.level >= 1 ? 1 : 2;
-    await db.query("UPDATE games SET pollution=LEAST(20, pollution+$1) WHERE id=$2", [amount, id]);
-  }
-  if (event.effect === 'all_gain2cr') {
-    await db.query("UPDATE players SET credits=credits+2 WHERE game_id=$1", [id]);
-  }
-  if (event.effect === 'all_lose2cr') {
-    const hopital = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='hopital'", [id])).rows[0];
-    if (!hopital || hopital.level < 2) {
-      await db.query("UPDATE players SET credits=GREATEST(0,credits-2) WHERE game_id=$1", [id]);
-    }
-  }
-  if (event.effect === 'audit') {
-    const centrale = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='centrale_nucleaire'", [id])).rows[0];
-    if (centrale?.level >= 2) {
+    if (event.effect === 'pollution_plus2') {
       await db.query("UPDATE games SET pollution=LEAST(20, pollution+2) WHERE id=$1", [id]);
-    } else {
-      await db.query("UPDATE games SET pollution=GREATEST(0, pollution-1) WHERE id=$1", [id]);
     }
-  }
-
-  await db.query(
-    "UPDATE games SET phase='actions', current_player_slot=1, actions_done=0, current_event=$2 WHERE id=$1",
-    [id, JSON.stringify(event)]
-  );
-  await log(id, game.turn, `🎴 Événement : ${event.title} — ${event.desc}`);
-
-  res.json({ event });
-});
-
-router.post('/:game_id/action', async (req, res) => {
-  const { player_slot, action_type, building_id } = req.body;
-  const id = req.params.game_id;
-
-  const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
-  if (game.phase !== 'actions') return res.status(400).json({ error: 'Pas en phase Actions' });
-  if (Number(game.current_player_slot) !== Number(player_slot)) return res.status(400).json({ error: "Ce n'est pas ton tour" });
-
-  const player = (await db.query("SELECT * FROM players WHERE game_id=$1 AND slot=$2", [id, player_slot])).rows[0];
-  const event  = game.current_event;
-
-  if (action_type === 'pass') {
-    await nextPlayer(id, game);
-    await log(id, game.turn, `⏭ Joueur ${player_slot} passe son tour`);
-    return res.json({ success: true });
-  }
-
-  if (action_type === 'upgrade') {
-    const building = (await db.query("SELECT * FROM buildings WHERE id=$1 AND game_id=$2", [building_id, id])).rows[0];
-    if (!building) return res.status(404).json({ error: 'Bâtiment introuvable' });
-    if (building.level >= 2) return res.status(400).json({ error: 'Déjà au niveau maximum' });
-
-    if (Number(building.level) === 1 && building.type !== 'recherche') {
-      const recherche = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='recherche'", [id])).rows[0];
-      if (!recherche || Number(recherche.level) < 1) {
-        return res.status(400).json({ error: 'Le Centre de Recherche doit être Nv1 pour construire un Nv2' });
+    if (event.effect === 'all_gain2cr') {
+      await db.query("UPDATE players SET credits=credits+2 WHERE game_id=$1", [id]);
+    }
+    if (event.effect === 'all_lose2cr') {
+      const hopital = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='hopital'", [id])).rows[0];
+      if (!hopital || hopital.level < 2) {
+        await db.query("UPDATE players SET credits=GREATEST(0,credits-2) WHERE game_id=$1", [id]);
+      }
+    }
+    if (event.effect === 'audit') {
+      const centrale = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='centrale_nucleaire'", [id])).rows[0];
+      if (centrale?.level >= 2) {
+        await db.query("UPDATE games SET pollution=LEAST(20, pollution+2) WHERE id=$1", [id]);
+      } else {
+        await db.query("UPDATE games SET pollution=GREATEST(0, pollution-1) WHERE id=$1", [id]);
       }
     }
 
-    let cost = COSTS[building.type]?.[building.level] ?? 4;
-    if (cost === 0) return res.status(400).json({ error: 'Ce bâtiment ne peut pas être amélioré' });
-
-    if (event?.effect === 'upgrade_cost_plus1')  cost += 1;
-    if (event?.effect === 'upgrade_cost_minus1' && building.level === 1) cost = Math.max(0, cost - 1);
-
-    if (player.credits < cost) return res.status(400).json({ error: `Crédits insuffisants (besoin: ${cost})` });
-
-    await db.query("UPDATE buildings SET level=level+1, owner_slot=$1 WHERE id=$2", [player_slot, building_id]);
-    await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [cost, id, player_slot]);
-
-    if (building.type === 'centrale_nucleaire' && building.level === 1) {
-      await db.query("UPDATE games SET fossil_level=2, pollution=LEAST(20,pollution+4) WHERE id=$1", [id]);
-    }
-
-    await log(id, game.turn, `🏗 Joueur ${player_slot} améliore ${building.type} → Nv${building.level + 1} (-${cost} cr)`);
-    await nextPlayer(id, game);
-    return res.json({ success: true, new_level: building.level + 1, cost });
-  }
-
-  if (action_type === 'depollute') {
-    const ecole = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='ecole'", [id])).rows[0];
-    if (!ecole || ecole.level < 1) return res.status(400).json({ error: "L'École doit être au Niveau 1" });
-
-    const isFree = event?.effect === 'free_depollute';
-    const cost   = isFree ? 0 : 3;
-
-    if (player.credits < cost) return res.status(400).json({ error: 'Crédits insuffisants' });
-
-    const reduction = ecole.level >= 2 ? 2 : 1;
-    await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [cost, id, player_slot]);
-    await db.query("UPDATE games SET pollution=GREATEST(0,pollution-$1) WHERE id=$2", [reduction, id]);
-
-    if (isFree) {
-      await db.query("UPDATE games SET current_event=current_event::jsonb - 'effect' WHERE id=$1", [id]);
-    }
-
-    await log(id, game.turn, `🌱 Joueur ${player_slot} dépollue (-${reduction} pollution, -${cost} cr)`);
-    await nextPlayer(id, game);
-    return res.json({ success: true, reduction, cost });
-  }
-
-  return res.status(400).json({ error: 'Action inconnue' });
-});
-
-router.post('/:game_id/end-turn', async (req, res) => {
-  const id = req.params.game_id;
-  const game      = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
-  const buildings = (await db.query("SELECT * FROM buildings WHERE game_id=$1", [id])).rows;
-  const event     = game.current_event;
-
-  if (game.phase !== 'bilan') return res.status(400).json({ error: 'Pas encore en phase Bilan' });
-
-  let demand = 0;
-  let green  = 0;
-
-  for (const b of buildings) {
-    if (['hopital','ecole','recherche','residentiel'].includes(b.type)) {
-      let lvl = b.level;
-      if (b.type === 'residentiel' && event?.effect === 'demand_plus1_residential') lvl += 1;
-      demand += lvl;
-    }
-    if (['eolienne','solaire'].includes(b.type) && b.level > 0) {
-      let prod = b.level;
-      if (event?.effect === 'green_zero') prod = 0;
-      if (event?.effect === 'green_plus1') prod += 1;
-      green += prod;
-    }
-    if (b.type === 'parc' && b.level > 0) {
-      await db.query("UPDATE games SET pollution=GREATEST(0,pollution-$1) WHERE id=$2", [b.level, id]);
-    }
-  }
-
-  const centrale = buildings.find(b => b.type === 'centrale_nucleaire');
-  const fossilBaseConsumption = centrale ? Number(centrale.level) : 0;
-  demand += fossilBaseConsumption;
-
-  const fossil_covers = Math.max(0, demand - green);
-  const maxFossil     = game.fossil_level >= 2 ? 8 : 4;
-
-  let blackout = false;
-  let blackout_excess = 0;
-  if (fossil_covers > maxFossil) {
-    blackout = true;
-    blackout_excess = fossil_covers - maxFossil;
-  }
-
-  const multiplier       = game.fossil_level >= 2 ? 2 : 1;
-  const effective_fossil = Math.min(fossil_covers, maxFossil);
-  const pollution_add    = effective_fossil * multiplier;
-  const new_pollution    = Math.min(20, game.pollution + pollution_add);
-
-  await db.query(
-    "UPDATE games SET pollution=$1, turn=turn+1, phase='event', current_event=NULL WHERE id=$2",
-    [new_pollution, id]
-  );
-
-  await db.query("UPDATE players SET credits=credits+3 WHERE game_id=$1", [id]);
-
-  const residentiels = buildings.filter(b => b.type === 'residentiel' && b.owner_slot && b.level > 0);
-  for (const r of residentiels) {
     await db.query(
-      "UPDATE players SET credits=credits+$1 WHERE game_id=$2 AND slot=$3",
-      [r.level, id, r.owner_slot]
+      "UPDATE games SET phase='actions', current_player_slot=1, current_event=$2 WHERE id=$1",
+      [id, JSON.stringify(event)]
     );
+    await addLog(id, game.turn, `🎴 Event: ${event.title} — ${event.desc}`);
+
+    res.json({ event });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
   }
-
-  await log(id, game.turn, `📊 Bilan : demande ${demand}, vert ${green}, fossile ${effective_fossil}, +${pollution_add} pollution`);
-
-  const lost = new_pollution >= 20;
-  if (lost) await db.query("UPDATE games SET status='lost' WHERE id=$1", [id]);
-
-  const winners = await checkVictory(id);
-  if (winners.length > 0) {
-    await db.query("UPDATE games SET status='won' WHERE id=$1", [id]);
-    for (const w of winners) {
-      await log(id, game.turn, `🏆 ${w.pseudo} a gagné avec le rôle ${w.role} !`);
-    }
-  }
-
-  res.json({
-    demand, green, fossil_covers, effective_fossil,
-    pollution_add, new_pollution, lost,
-    blackout, blackout_excess,
-    winners: winners.map(w => ({ pseudo: w.pseudo, role: w.role })),
-  });
 });
 
-router.post('/:game_id/dismantle', async (req, res) => {
-  const { player_slot } = req.body;
-  const id = req.params.game_id;
+// ── POST action ──────────────────────────────────────────────
+router.post('/:game_id/action', async (req, res) => {
+  try {
+    const { player_slot, action_type, building_id } = req.body;
+    const id = req.params.game_id;
 
-  const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
-  if (game.phase !== 'actions') return res.status(400).json({ error: 'Pas en phase Actions' });
-  if (Number(game.current_player_slot) !== Number(player_slot)) return res.status(400).json({ error: "Ce n'est pas ton tour" });
+    const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
+    if (game.phase !== 'actions') return res.status(400).json({ error: 'Not in Actions phase' });
+    if (game.current_player_slot !== player_slot) return res.status(400).json({ error: "Not your turn" });
 
-  const players = (await db.query("SELECT * FROM players WHERE game_id=$1", [id])).rows;
-  const totalCredits = players.reduce((sum, p) => sum + p.credits, 0);
+    const player = (await db.query("SELECT * FROM players WHERE game_id=$1 AND slot=$2", [id, player_slot])).rows[0];
+    const event  = game.current_event;
 
-  if (totalCredits < 16) return res.status(400).json({ error: `Crédits collectifs insuffisants (${totalCredits}/16 cr)` });
-
-  let remaining = 16;
-  for (const p of players) {
-    const contribution = Math.min(p.credits, remaining);
-    if (contribution > 0) {
-      await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [contribution, id, p.slot]);
-      remaining -= contribution;
+    if (action_type === 'pass') {
+      await nextPlayer(id, game);
+      await addLog(id, game.turn, `⏭ Player ${player_slot} passes`);
+      return res.json({ success: true });
     }
-    if (remaining <= 0) break;
+
+    if (action_type === 'upgrade') {
+      const building = (await db.query("SELECT * FROM buildings WHERE id=$1 AND game_id=$2", [building_id, id])).rows[0];
+      if (!building) return res.status(404).json({ error: 'Building not found' });
+      if (building.level >= 2) return res.status(400).json({ error: 'Already at max level' });
+
+      if (building.level === 1 && building.type !== 'recherche') {
+        const recherche = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='recherche'", [id])).rows[0];
+        if (!recherche || recherche.level < 1) {
+          return res.status(400).json({ error: 'Research Center must be Lv1 to build Lv2' });
+        }
+      }
+
+      let cost = COSTS[building.type]?.[building.level] ?? 4;
+      if (cost === 0) return res.status(400).json({ error: 'This building cannot be upgraded' });
+
+      if (event?.effect === 'upgrade_cost_plus1')  cost += 1;
+      if (event?.effect === 'upgrade_cost_minus1' && building.level === 1) cost = Math.max(0, cost - 1);
+
+      if (player.credits < cost) return res.status(400).json({ error: `Not enough credits (need: ${cost})` });
+
+      await db.query("UPDATE buildings SET level=level+1, owner_slot=$1 WHERE id=$2", [player_slot, building_id]);
+      await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [cost, id, player_slot]);
+
+      if (building.type === 'centrale_nucleaire' && building.level === 1) {
+        await db.query("UPDATE games SET fossil_level=2, pollution=LEAST(20,pollution+4) WHERE id=$1", [id]);
+      }
+
+      await addLog(id, game.turn, `🏗 Player ${player_slot} upgrades ${building.type} → Lv${building.level + 1} (-${cost} cr)`);
+      await nextPlayer(id, game);
+      return res.json({ success: true, new_level: building.level + 1, cost });
+    }
+
+    if (action_type === 'depollute') {
+      const ecole = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='ecole'", [id])).rows[0];
+      if (!ecole || ecole.level < 1) return res.status(400).json({ error: 'School must be at Level 1' });
+
+      const isFree = event?.effect === 'free_depollute';
+      const cost   = isFree ? 0 : 3;
+      if (player.credits < cost) return res.status(400).json({ error: 'Not enough credits' });
+
+      const reduction = ecole.level >= 2 ? 2 : 1;
+      await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [cost, id, player_slot]);
+      await db.query("UPDATE games SET pollution=GREATEST(0,pollution-$1) WHERE id=$2", [reduction, id]);
+
+      await addLog(id, game.turn, `🌱 Player ${player_slot} depollutes (-${reduction} pollution, -${cost} cr)`);
+      await nextPlayer(id, game);
+      return res.json({ success: true, reduction, cost });
+    }
+
+    return res.status(400).json({ error: 'Unknown action' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
   }
-
-  await db.query("UPDATE buildings SET level=0, owner_slot=NULL WHERE game_id=$1 AND type='centrale_nucleaire'", [id]);
-  await db.query("UPDATE games SET fossil_level=0, pollution=0 WHERE id=$1", [id]);
-
-  await log(id, game.turn, `💥 La Centrale Fossile a été démantelée ! Pollution remise à 0.`);
-  await nextPlayer(id, game);
-
-  res.json({ success: true });
 });
 
+// ── POST end-turn ────────────────────────────────────────────
+router.post('/:game_id/end-turn', async (req, res) => {
+  try {
+    const id       = req.params.game_id;
+    const game     = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
+    const buildings= (await db.query("SELECT * FROM buildings WHERE game_id=$1", [id])).rows;
+    const event    = game.current_event;
+
+    if (game.phase !== 'bilan') return res.status(400).json({ error: 'Not in Bilan phase yet' });
+
+    let demand = 0;
+    let green  = 0;
+
+    for (const b of buildings) {
+      if (['hopital','ecole','recherche','residentiel'].includes(b.type)) {
+        let lvl = b.level;
+        if (b.type === 'residentiel' && event?.effect === 'demand_plus1_residential') lvl += 1;
+        demand += lvl;
+      }
+      if (['eolienne','solaire'].includes(b.type) && b.level > 0) {
+        let prod = b.level;
+        if (event?.effect === 'green_zero')  prod = 0;
+        if (event?.effect === 'green_plus1') prod += 1;
+        green += prod;
+      }
+      if (b.type === 'parc' && b.level > 0) {
+        await db.query("UPDATE games SET pollution=GREATEST(0,pollution-$1) WHERE id=$2", [b.level, id]);
+      }
+    }
+
+    const fossil_covers    = Math.max(0, demand - green);
+    const maxFossil        = game.fossil_level >= 2 ? 8 : 4;
+    const blackout         = fossil_covers > maxFossil;
+    const blackout_excess  = blackout ? fossil_covers - maxFossil : 0;
+    const multiplier       = game.fossil_level >= 2 ? 2 : 1;
+    const effective_fossil = Math.min(fossil_covers, maxFossil);
+    const pollution_add    = effective_fossil * multiplier;
+
+    const gameNow  = (await db.query("SELECT pollution FROM games WHERE id=$1", [id])).rows[0];
+    const new_pollution = Math.min(20, gameNow.pollution + pollution_add);
+
+    await db.query(
+      "UPDATE games SET pollution=$1, turn=turn+1, phase='event', current_event=NULL WHERE id=$2",
+      [new_pollution, id]
+    );
+
+    await db.query("UPDATE players SET credits=credits+3 WHERE game_id=$1", [id]);
+
+    const residentiels = buildings.filter(b => b.type === 'residentiel' && b.owner_slot && b.level > 0);
+    for (const r of residentiels) {
+      await db.query(
+        "UPDATE players SET credits=credits+$1 WHERE game_id=$2 AND slot=$3",
+        [r.level, id, r.owner_slot]
+      );
+    }
+
+    await addLog(id, game.turn, `📊 Report: demand ${demand}, green ${green}, fossil ${effective_fossil}, +${pollution_add} pollution`);
+
+    const lost = new_pollution >= 20;
+    if (lost) await db.query("UPDATE games SET status='lost' WHERE id=$1", [id]);
+
+    const winners = await checkVictory(id);
+    if (winners.length > 0) {
+      await db.query("UPDATE games SET status='won' WHERE id=$1", [id]);
+      for (const w of winners) {
+        await addLog(id, game.turn, `🏆 ${w.pseudo} won with role ${w.role}!`);
+      }
+    }
+
+    res.json({
+      demand, green, fossil_covers, effective_fossil,
+      pollution_add, new_pollution, lost,
+      blackout, blackout_excess,
+      winners: winners.map(w => ({ pseudo: w.pseudo, role: w.role })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── Helpers ──────────────────────────────────────────────────
 async function nextPlayer(game_id, game) {
   const players = (await db.query("SELECT * FROM players WHERE game_id=$1 ORDER BY slot", [game_id])).rows;
   const slots   = players.map(p => p.slot);
@@ -290,13 +274,13 @@ async function nextPlayer(game_id, game) {
 
   if (!next) {
     await db.query("UPDATE games SET phase='bilan', current_player_slot=NULL WHERE id=$1", [game_id]);
-    await log(game_id, game.turn, '⚖️ Tous les joueurs ont joué → Phase Bilan');
+    await addLog(game_id, game.turn, '⚖️ All players played → Bilan phase');
   } else {
     await db.query("UPDATE games SET current_player_slot=$1 WHERE id=$2", [next, game_id]);
   }
 }
 
-async function log(game_id, turn, message) {
+async function addLog(game_id, turn, message) {
   await db.query(
     "INSERT INTO game_log (game_id, turn, message) VALUES ($1,$2,$3)",
     [game_id, turn, message]
@@ -308,10 +292,10 @@ async function checkVictory(game_id) {
   const players   = (await db.query("SELECT * FROM players WHERE game_id=$1", [game_id])).rows;
   const buildings = (await db.query("SELECT * FROM buildings WHERE game_id=$1", [game_id])).rows;
 
-  const pollution  = game.pollution;
-  const bldg       = (type) => buildings.filter(b => b.type === type);
-  const lvl        = (type, minLevel) => buildings.some(b => b.type === type && b.level >= minLevel);
-  const greenCount = buildings.filter(b => ['eolienne','solaire'].includes(b.type) && b.level >= 1).length;
+  const pollution   = game.pollution;
+  const bldg        = (type) => buildings.filter(b => b.type === type);
+  const lvl         = (type, minLevel) => buildings.some(b => b.type === type && b.level >= minLevel);
+  const greenCount  = buildings.filter(b => ['eolienne','solaire'].includes(b.type) && b.level >= 1).length;
   const fossilLevel = buildings.find(b => b.type === 'centrale_nucleaire')?.level ?? 0;
   const dismantled  = fossilLevel === 0;
 
