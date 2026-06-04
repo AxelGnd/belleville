@@ -243,7 +243,7 @@ router.post('/:game_id/end-turn', async (req, res) => {
     );
   }
 
-  await log(game_id, game.turn, `📊 Bilan : demande ${demand}, vert ${green}, fossile ${effective_fossil}, +${pollution_add} pollution`);
+  await log(id, game.turn, `📊 Bilan : demande ${demand}, vert ${green}, fossile ${effective_fossil}, +${pollution_add} pollution`);
 
   const lost = new_pollution >= 20;
   if (lost) await db.query("UPDATE games SET status='lost' WHERE id=$1", [id]);
