@@ -198,21 +198,26 @@ router.post('/:game_id/end-turn', async (req, res) => {
     let green  = 0;
 
     for (const b of buildings) {
-      if (['hopital','ecole','recherche','residentiel'].includes(b.type)) {
-        let lvl = b.level;
-        if (b.type === 'residentiel' && event?.effect === 'demand_plus1_residential') lvl += 1;
-        demand += lvl;
-      }
-      if (['eolienne','solaire'].includes(b.type) && b.level > 0) {
-        let prod = b.level;
-        if (event?.effect === 'green_zero')  prod = 0;
-        if (event?.effect === 'green_plus1') prod += 1;
-        green += prod;
-      }
-      if (b.type === 'parc' && b.level > 0) {
-        await db.query("UPDATE games SET pollution=GREATEST(0,pollution-$1) WHERE id=$2", [b.level, id]);
-      }
-    }
+  if (['hopital','ecole','recherche'].includes(b.type)) {
+    demand += b.level;
+  }
+  // Résidentiel : Nv1 consomme 2, Nv2 consomme 1
+  if (b.type === 'residentiel') {
+    let lvl = b.level;
+    if (b.level === 1) demand += 2;
+    if (b.level === 2) demand += 1;
+    if (event?.effect === 'demand_plus1_residential' && b.level > 0) demand += 1;
+  }
+  if (['eolienne','solaire'].includes(b.type) && b.level > 0) {
+    let prod = b.level;
+    if (event?.effect === 'green_zero')  prod = 0;
+    if (event?.effect === 'green_plus1') prod += 1;
+    green += prod;
+  }
+  if (b.type === 'parc' && b.level > 0) {
+    await db.query("UPDATE games SET pollution=GREATEST(0,pollution-$1) WHERE id=$2", [b.level, id]);
+  }
+}
 
     const fossil_covers    = Math.max(0, demand - green);
     const maxFossil        = game.fossil_level >= 2 ? 8 : 4;
@@ -232,13 +237,15 @@ router.post('/:game_id/end-turn', async (req, res) => {
 
     await db.query("UPDATE players SET credits=credits+3 WHERE game_id=$1", [id]);
 
-    const residentiels = buildings.filter(b => b.type === 'residentiel' && b.owner_slot && b.level > 0);
-    for (const r of residentiels) {
-      await db.query(
-        "UPDATE players SET credits=credits+$1 WHERE game_id=$2 AND slot=$3",
-        [r.level, id, r.owner_slot]
-      );
-    }
+    // Bonus résidentiels : Nv1 = +1 cr, Nv2 = +2 cr
+const residentiels = buildings.filter(b => b.type === 'residentiel' && b.owner_slot && b.level > 0);
+for (const r of residentiels) {
+  const bonus = r.level === 1 ? 1 : r.level === 2 ? 2 : 0;
+  await db.query(
+    "UPDATE players SET credits=credits+$1 WHERE game_id=$2 AND slot=$3",
+    [bonus, id, r.owner_slot]
+  );
+}
 
     await addLog(id, game.turn, `📊 Report: demand ${demand}, green ${green}, fossil ${effective_fossil}, +${pollution_add} pollution`);
 
