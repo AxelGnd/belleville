@@ -176,6 +176,15 @@ router.post('/:game_id/action', async (req, res) => {
       await nextPlayer(id, game);
       return res.json({ success: true, reduction, cost });
     }
+    if (action_type === 'dismantle') {
+  const building = (await db.query("SELECT * FROM buildings WHERE id=$1 AND game_id=$2", [building_id, id])).rows[0];
+  if (building.type !== 'centrale_nucleaire') return res.status(400).json({ error: 'Not the power plant' });
+
+  await db.query("UPDATE buildings SET level=0, owner_slot=NULL WHERE id=$1", [building_id]);
+  await addLog(id, game.turn, `☢️ Player ${player_slot} dismantled the Nuclear Power Plant`);
+  await nextPlayer(id, game);
+  return res.json({ success: true });
+}
 
     return res.status(400).json({ error: 'Unknown action' });
   } catch (err) {

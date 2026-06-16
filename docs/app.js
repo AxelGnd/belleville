@@ -648,6 +648,35 @@ function showBuildMenu() {
     centrale_nucleaire: [0, 4],
   };
 
+  // Cas spécial : centrale nucléaire avec option démantèlement
+if (type === 'centrale_nucleaire') {
+  const centrale = list[0];
+  const canUpgrade = centrale.level === 1;
+  const canDismantle = centrale.level >= 1;
+
+  return `
+    <div class="build-row">
+      <div class="build-left">
+        <span class="build-icon">⚛️</span>
+        <div class="build-info">
+          <div class="build-name">Nuclear Power Plant (Lv${centrale.level})</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        ${canUpgrade ? `
+          <div style="text-align:center">
+            <div class="build-cost">💰 2 cr</div>
+            <button class="build-btn ${me?.credits < 2 ? 'disabled':''}" ${me?.credits < 2 ? 'disabled':''}
+              onclick="doAction('upgrade',${centrale.id});closeModal()">Lv 1→2</button>
+          </div>` : ''}
+        ${canDismantle ? `
+          <button class="build-btn" style="background:#ef4444" onclick="dismantlePlant(${centrale.id});closeModal()">Dismantle</button>
+        ` : ''}
+      </div>
+    </div>
+  `;
+}
+
   const grouped = {};
   for (const b of buildings) {
     if (!grouped[b.type]) grouped[b.type] = [];
@@ -862,6 +891,10 @@ async function blackoutDowngrade(building_id) {
 
   socket.emit('game_update', { game_id: state.game_id });
   loadGame();
+}
+async function dismantlePlant(building_id) {
+  if (!confirm('Dismantle the Nuclear Power Plant? This cannot be undone.')) return;
+  await doAction('dismantle', building_id);
 }
 // ── Démarrage ────────────────────────────────────────────────
 renderWelcome();

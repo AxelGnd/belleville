@@ -29,6 +29,10 @@ router.post('/join', async (req, res) => {
           [game_id, type]
         );
       }
+      await db.query(
+  "INSERT INTO buildings (game_id, type, level) VALUES ($1,'centrale_nucleaire',1)",
+  [game_id]
+);
     } else {
       game_id = result.rows[0].id;
     }
