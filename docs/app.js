@@ -490,7 +490,7 @@ function renderGame(data) {
     `;
   }
   if (game.phase === 'blackout') {
-  const downgradable = buildings.filter(b => b.level > 0);
+  const downgradable = buildings.filter(b => b.level > 0 && b.type !== 'centrale_nucleaire');
   phaseZone = `
     <div class="phase-banner" style="background:#450a0a22;border-color:#ef444444">
       <div class="phase-label" style="color:#ef4444">⚡ BLACKOUT!</div>
@@ -645,37 +645,8 @@ function showBuildMenu() {
     eolienne:           [4, 6],
     solaire:            [4, 6],
     parc:               [13, 20],
-    centrale_nucleaire: [0, 4],
+    centrale_nucleaire: [0, 2],
   };
-
-  // Cas spécial : centrale nucléaire avec option démantèlement
-if (type === 'centrale_nucleaire') {
-  const centrale = list[0];
-  const canUpgrade = centrale.level === 1;
-  const canDismantle = centrale.level >= 1;
-
-  return `
-    <div class="build-row">
-      <div class="build-left">
-        <span class="build-icon">⚛️</span>
-        <div class="build-info">
-          <div class="build-name">Nuclear Power Plant (Lv${centrale.level})</div>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px">
-        ${canUpgrade ? `
-          <div style="text-align:center">
-            <div class="build-cost">💰 2 cr</div>
-            <button class="build-btn ${me?.credits < 2 ? 'disabled':''}" ${me?.credits < 2 ? 'disabled':''}
-              onclick="doAction('upgrade',${centrale.id});closeModal()">Lv 1→2</button>
-          </div>` : ''}
-        ${canDismantle ? `
-          <button class="build-btn" style="background:#ef4444" onclick="dismantlePlant(${centrale.id});closeModal()">Dismantle</button>
-        ` : ''}
-      </div>
-    </div>
-  `;
-}
 
   const grouped = {};
   for (const b of buildings) {
@@ -687,13 +658,54 @@ if (type === 'centrale_nucleaire') {
   const rechercheOk = recherche && recherche.level >= 1;
 
   const rows = Object.entries(grouped).map(([type, list]) => {
+    // Cas spécial : centrale nucléaire (upgrade ou démantèlement)
+    if (type === 'centrale_nucleaire') {
+      const centrale = list[0];
+      const canUpgrade   = centrale.level === 1;
+      const canDismantle = centrale.level >= 1;
+
+      if (!canUpgrade && !canDismantle) {
+        return `
+          <div class="build-row max">
+            <div class="build-left">
+              <span class="build-icon">⚛️</span>
+              <div class="build-info">
+                <div class="build-name">Nuclear Power Plant</div>
+                <div class="build-status" style="color:#6b7280">Dismantled</div>
+              </div>
+            </div>
+          </div>`;
+      }
+
+      return `
+        <div class="build-row">
+          <div class="build-left">
+            <span class="build-icon">⚛️</span>
+            <div class="build-info">
+              <div class="build-name">Nuclear Power Plant (Lv${centrale.level})</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px">
+            ${canUpgrade ? `
+              <div style="text-align:center">
+                <div class="build-cost">💰 2 cr</div>
+                <button class="build-btn ${me?.credits < 2 ? 'disabled':''}" ${me?.credits < 2 ? 'disabled':''}
+                  onclick="doAction('upgrade',${centrale.id});closeModal()">Lv 1→2</button>
+              </div>` : ''}
+            ${canDismantle ? `
+              <button class="build-btn" style="background:#ef4444" onclick="dismantlePlant(${centrale.id});closeModal()">Dismantle</button>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }
+
     const hasLv0 = list.find(b => b.level === 0);
     const hasLv1 = list.find(b => b.level === 1);
 
     let cost0 = costs[type]?.[0] ?? 0;
     let cost1 = costs[type]?.[1] ?? 0;
 
-    // Applique modificateurs événement
     if (currentEvent?.effect === 'upgrade_cost_plus1') {
       if (cost0 > 0) cost0 += 1;
       if (cost1 > 0) cost1 += 1;
@@ -767,7 +779,10 @@ if (type === 'centrale_nucleaire') {
   document.body.appendChild(modal);
   window._currentModal = modal;
 }
-
+async function dismantlePlant(building_id) {
+  if (!confirm('Dismantle the Nuclear Power Plant? This cannot be undone.')) return;
+  await doAction('dismantle', building_id);
+}
 function closeModal() {
   if (window._currentModal) {
     window._currentModal.remove();

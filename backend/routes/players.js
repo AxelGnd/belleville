@@ -21,7 +21,7 @@ router.post('/join', async (req, res) => {
         'residentiel','residentiel','residentiel',
         'eolienne','eolienne','solaire','solaire',
         'parc','parc','parc',
-        'centrale_nucleaire'
+        
       ];
       for (const type of buildings) {
         await db.query(
