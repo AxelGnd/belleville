@@ -368,7 +368,7 @@ function pollColor(p) {
 }
 
 function phaseLabel(phase) {
-  return { event:'Event', actions:'Actions', bilan:'Report', waiting:'Waiting' }[phase] || phase;
+  return { event:'Event', actions:'Actions', bilan:'Report', blackout:'Blackout', waiting:'Waiting' }[phase] || phase;
 }
 
 function renderGame(data) {
@@ -489,6 +489,26 @@ function renderGame(data) {
       </div>
     `;
   }
+  if (game.phase === 'blackout') {
+  const downgradable = buildings.filter(b => b.level > 0);
+  phaseZone = `
+    <div class="phase-banner" style="background:#450a0a22;border-color:#ef444444">
+      <div class="phase-label" style="color:#ef4444">⚡ BLACKOUT!</div>
+      <div class="phase-desc">Demand exceeded supply. The city must downgrade ${game.blackout_excess} building level(s). Vote together which buildings to downgrade.</div>
+      <div class="build-list">
+        ${downgradable.map(b => `
+          <div class="build-row">
+            <div class="build-left">
+              <span class="build-icon">${BUILDING_ICONS[b.type]||'🏗'}</span>
+              <div class="build-name">${BUILDING_NAMES[b.type]||b.type} (Lv${b.level})</div>
+            </div>
+            <button class="build-btn" style="background:#ef4444" onclick="blackoutDowngrade(${b.id})">Downgrade</button>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
 
   show(`
     <div class="game-header">
@@ -826,6 +846,22 @@ function showEndScreen(won, winners) {
 socket.on('state_update', () => {
   if (state.game_id) loadGame();
 });
+async function blackoutDowngrade(building_id) {
+  const res  = await fetch(`${API}/game/${state.game_id}/blackout-downgrade`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ building_id }),
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error);
 
+  if (data.resolved && data.winners?.length > 0) {
+    showEndScreen(true, data.winners);
+    return;
+  }
+
+  socket.emit('game_update', { game_id: state.game_id });
+  loadGame();
+}
 // ── Démarrage ────────────────────────────────────────────────
 renderWelcome();

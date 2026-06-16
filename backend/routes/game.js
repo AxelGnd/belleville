@@ -199,7 +199,7 @@ router.post('/:game_id/end-turn', async (req, res) => {
     let green  = 0;
 
     for (const b of buildings) {
-      if (['hopital','ecole','recherche'].includes(b.type)) {
+      if (['hopital','ecole','recherche','centrale_nucleaire'].includes(b.type)) {
         demand += b.level;
       }
       if (b.type === 'residentiel') {
