@@ -509,6 +509,23 @@ function renderGame(data) {
     </div>
   `;
 }
+// Si une demande d'aide est active et je ne suis pas le demandeur → vue contributeur
+if (game.help_request && game.help_request.requester_slot !== state.player_slot) {
+  renderHelpContributorView(game.help_request, players);
+  return;
+}
+
+// Si je suis le demandeur d'une aide active, montrer ma vue dédiée
+if (game.help_request && game.help_request.requester_slot === state.player_slot) {
+  showHelpRequesterView();
+  return;
+}
+
+// Si une dépollution groupée est en cours et je ne l'ai pas encore confirmée
+if (game.depollute_request && !game.depollute_request.confirmed.includes(state.player_slot) && game.depollute_request.initiator_slot !== state.player_slot) {
+  renderDepolluteBoostView(game.depollute_request, me);
+  return;
+}
 
   show(`
     <div class="game-header">
@@ -729,24 +746,26 @@ function showBuildMenu() {
       </div>`;
 
     const btn0 = canBuy0 ? `
-      <div style="text-align:center">
-        <div class="build-cost">💰 ${cost0} cr</div>
-        <button class="build-btn ${me?.credits < cost0 ? 'disabled':''}"
-          ${me?.credits < cost0 ? 'disabled':''}
-          onclick="doAction('upgrade',${hasLv0.id});closeModal()">
-          Lv 0→1
-        </button>
-      </div>` : '';
+  <div style="text-align:center">
+    <div class="build-cost">💰 ${cost0} cr</div>
+    ${me?.credits >= cost0 ? `
+      <button class="build-btn" onclick="doAction('upgrade',${hasLv0.id});closeModal()">Lv 0→1</button>
+    ` : `
+      <button class="build-btn disabled" disabled>Lv 0→1</button>
+      <button class="build-btn" style="background:#60a5fa;margin-top:4px" onclick="requestHelp(${hasLv0.id});closeModal()">🤝 Ask for help</button>
+    `}
+  </div>` : '';
 
-    const btn1 = canBuy1 ? `
-      <div style="text-align:center">
-        <div class="build-cost">💰 ${cost1} cr</div>
-        <button class="build-btn ${me?.credits < cost1 ? 'disabled':''}"
-          ${me?.credits < cost1 ? 'disabled':''}
-          onclick="doAction('upgrade',${hasLv1.id});closeModal()">
-          Lv 1→2
-        </button>
-      </div>` : '';
+const btn1 = canBuy1 ? `
+  <div style="text-align:center">
+    <div class="build-cost">💰 ${cost1} cr</div>
+    ${me?.credits >= cost1 ? `
+      <button class="build-btn" onclick="doAction('upgrade',${hasLv1.id});closeModal()">Lv 1→2</button>
+    ` : `
+      <button class="build-btn disabled" disabled>Lv 1→2</button>
+      <button class="build-btn" style="background:#60a5fa;margin-top:4px" onclick="requestHelp(${hasLv1.id});closeModal()">🤝 Ask for help</button>
+    `}
+  </div>` : '';
 
     return `
       <div class="build-row">
@@ -803,7 +822,31 @@ async function doAction(action_type, building_id = null) {
   const data = await res.json();
   if (!res.ok) return alert(data.error);
   socket.emit('game_update', { game_id: state.game_id });
+
+  if (data.boost_started) {
+    showDepolluteInitiatorWaitView();
+    return;
+  }
+
   loadGame();
+}
+
+function showDepolluteInitiatorWaitView() {
+  stopPolling();
+  show(`
+    <div style="text-align:center;padding:2rem 0">
+      <h2>🌱 Depollution started</h2>
+      <p>Waiting for other players to finish contributing to the boost...</p>
+    </div>
+  `);
+  pollingInterval = setInterval(async () => {
+    const res = await fetch(`${API}/game/${state.game_id}/state`);
+    const data = await res.json();
+    if (!data.game.depollute_request) {
+      stopPolling();
+      loadGame();
+    }
+  }, 1500);
 }
 
 async function drawEvent() {
@@ -910,6 +953,179 @@ async function blackoutDowngrade(building_id) {
 async function dismantlePlant(building_id) {
   if (!confirm('Dismantle the Nuclear Power Plant? This cannot be undone.')) return;
   await doAction('dismantle', building_id);
+}
+async function requestHelp(building_id) {
+  const res = await fetch(`${API}/game/${state.game_id}/help/request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ building_id, requester_slot: state.player_slot }),
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error);
+  socket.emit('game_update', { game_id: state.game_id });
+  showHelpRequesterView();
+}
+
+function showHelpRequesterView() {
+  stopPolling();
+
+  pollingInterval = setInterval(async () => {
+    const res = await fetch(`${API}/game/${state.game_id}/state`);
+    const data = await res.json();
+    if (!data.game.help_request) {
+      stopPolling();
+      loadGame();
+      return;
+    }
+    renderHelpRequesterView(data.game.help_request, data.players);
+  }, 1500);
+
+  fetch(`${API}/game/${state.game_id}/state`).then(r => r.json()).then(data => {
+    renderHelpRequesterView(data.game.help_request, data.players);
+  });
+}
+
+function renderHelpRequesterView(hr, players) {
+  if (!hr) { stopPolling(); loadGame(); return; }
+
+  const totalContributed = Object.values(hr.contributions).reduce((a,b) => a+b, 0);
+  const me = players.find(p => p.slot === state.player_slot);
+  const totalAvailable = (me?.credits ?? 0) + totalContributed;
+  const canLaunch = totalAvailable >= hr.cost;
+
+  const contribRows = Object.entries(hr.contributions).map(([slot, amount]) => {
+    const p = players.find(pp => pp.slot === parseInt(slot));
+    return `<div class="build-row"><div class="build-name">${p?.pseudo || 'Player '+slot}</div><div style="color:#22c55e">+${amount} cr</div></div>`;
+  }).join('') || `<div class="empty-msg">No contributions yet...</div>`;
+
+  show(`
+    <div style="text-align:center;padding:1rem 0">
+      <h2>🤝 Asking for help</h2>
+      <p>Cost: 💰 ${hr.cost} cr · You have ${me?.credits ?? 0} cr · Collected ${totalContributed} cr</p>
+      <div class="build-list">${contribRows}</div>
+      <div class="sep"></div>
+      <button class="btn btn-primary ${!canLaunch ? 'disabled' : ''}" ${!canLaunch ? 'disabled' : ''} onclick="launchHelpUpgrade()">
+        🚀 Launch upgrade (${totalAvailable}/${hr.cost})
+      </button>
+      <button class="btn btn-secondary" onclick="cancelHelpRequest()">Cancel</button>
+    </div>
+  `);
+}
+
+async function launchHelpUpgrade() {
+  const res = await fetch(`${API}/game/${state.game_id}/help/launch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ player_slot: state.player_slot }),
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error);
+  stopPolling();
+  socket.emit('game_update', { game_id: state.game_id });
+  loadGame();
+}
+
+async function cancelHelpRequest() {
+  await fetch(`${API}/game/${state.game_id}/help/cancel`, { method: 'POST' });
+  stopPolling();
+  socket.emit('game_update', { game_id: state.game_id });
+  loadGame();
+}
+function renderHelpContributorView(hr, players) {
+  stopPolling();
+  const requester = players.find(p => p.slot === hr.requester_slot);
+  const me = players.find(p => p.slot === state.player_slot);
+  const myContribution = hr.contributions[state.player_slot] || 0;
+  const totalContributed = Object.values(hr.contributions).reduce((a,b) => a+b, 0);
+
+  show(`
+    <div style="text-align:center;padding:1rem 0">
+      <h2>🤝 ${requester?.pseudo} needs help!</h2>
+      <p>Upgrade costs 💰 ${hr.cost} cr · Collected so far: ${totalContributed} cr</p>
+      <p style="color:#9ca3af">You have ${me?.credits ?? 0} cr · You gave ${myContribution} cr</p>
+      <input id="contrib-amount" type="number" min="1" max="${me?.credits ?? 0}" placeholder="Amount to give" style="text-align:center" />
+      <button class="btn btn-primary" onclick="contributeToHelp()">💰 Contribute</button>
+      <button class="btn btn-secondary" onclick="loadGame()">Wait / Refresh</button>
+    </div>
+  `);
+
+  pollingInterval = setInterval(async () => {
+    const res = await fetch(`${API}/game/${state.game_id}/state`);
+    const data = await res.json();
+    if (!data.game.help_request) {
+      stopPolling();
+      loadGame();
+    }
+  }, 1500);
+}
+
+async function contributeToHelp() {
+  const amount = parseInt(document.getElementById('contrib-amount').value);
+  if (!amount || amount <= 0) return alert('Enter a valid amount');
+
+  const res = await fetch(`${API}/game/${state.game_id}/help/contribute`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ player_slot: state.player_slot, amount }),
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error);
+  socket.emit('game_update', { game_id: state.game_id });
+  loadGame();
+}
+function renderDepolluteBoostView(dr, me) {
+  stopPolling();
+  const alreadyDone = dr.confirmed.includes(state.player_slot);
+
+  show(`
+    <div style="text-align:center;padding:1rem 0">
+      <h2>🌱 Group Depollution Boost</h2>
+      <p>Pay 2 cr to reduce pollution by 1 (repeatable). Total reduced so far: ${dr.pollution_reduced}</p>
+      <p style="color:#9ca3af">You have ${me?.credits ?? 0} cr</p>
+      ${alreadyDone
+        ? `<p style="color:#22c55e">✅ You're done. Waiting for others...</p>`
+        : `
+          <button class="btn btn-primary ${me?.credits < 2 ? 'disabled':''}" ${me?.credits < 2 ? 'disabled':''} onclick="contributeDepolluteBoost()">💰 Pay 2cr → -1 pollution</button>
+          <button class="btn btn-secondary" onclick="finishDepolluteBoost()">✅ I'm done</button>
+        `}
+    </div>
+  `);
+
+  pollingInterval = setInterval(async () => {
+    const res = await fetch(`${API}/game/${state.game_id}/state`);
+    const data = await res.json();
+    if (!data.game.depollute_request) {
+      stopPolling();
+      loadGame();
+      return;
+    }
+    renderDepolluteBoostView(data.game.depollute_request, data.players.find(p => p.slot === state.player_slot));
+  }, 1500);
+}
+
+async function contributeDepolluteBoost() {
+  const res = await fetch(`${API}/game/${state.game_id}/depollute-boost/contribute`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ player_slot: state.player_slot }),
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error);
+  socket.emit('game_update', { game_id: state.game_id });
+  loadGame();
+}
+
+async function finishDepolluteBoost() {
+  const res = await fetch(`${API}/game/${state.game_id}/depollute-boost/done`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ player_slot: state.player_slot }),
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error);
+  stopPolling();
+  socket.emit('game_update', { game_id: state.game_id });
+  loadGame();
 }
 // ── Démarrage ────────────────────────────────────────────────
 renderWelcome();

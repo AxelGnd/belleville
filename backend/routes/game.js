@@ -161,21 +161,27 @@ router.post('/:game_id/action', async (req, res) => {
     }
 
     if (action_type === 'depollute') {
-      const ecole = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='ecole'", [id])).rows[0];
-      if (!ecole || ecole.level < 1) return res.status(400).json({ error: 'School must be at Level 1' });
+  const ecole = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='ecole'", [id])).rows[0];
+  if (!ecole || ecole.level < 1) return res.status(400).json({ error: 'School must be at Level 1' });
 
-      const isFree = event?.effect === 'free_depollute';
-      const cost   = isFree ? 0 : 3;
-      if (player.credits < cost) return res.status(400).json({ error: 'Not enough credits' });
+  const isFree = event?.effect === 'free_depollute';
+  const cost   = isFree ? 0 : 3;
+  if (player.credits < cost) return res.status(400).json({ error: 'Not enough credits' });
 
-      const reduction = ecole.level >= 2 ? 2 : 1;
-      await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [cost, id, player_slot]);
-      await db.query("UPDATE games SET pollution=GREATEST(0,pollution-$1) WHERE id=$2", [reduction, id]);
+  const reduction = ecole.level >= 2 ? 2 : 1;
+  await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [cost, id, player_slot]);
+  await db.query("UPDATE games SET pollution=GREATEST(0,pollution-$1) WHERE id=$2", [reduction, id]);
 
-      await addLog(id, game.turn, `🌱 Player ${player_slot} depollutes (-${reduction} pollution, -${cost} cr)`);
-      await nextPlayer(id, game);
-      return res.json({ success: true, reduction, cost });
-    }
+  await addLog(id, game.turn, `🌱 Player ${player_slot} depollutes (-${reduction} pollution, -${cost} cr)`);
+
+  // Start group depollution boost instead of going to next player immediately
+  const players = (await db.query("SELECT * FROM players WHERE game_id=$1", [id])).rows;
+  const otherSlots = players.filter(p => p.slot !== player_slot).map(p => p.slot);
+  const depollute_request = { initiator_slot: player_slot, confirmed: [], pending: otherSlots, pollution_reduced: 0 };
+  await db.query("UPDATE games SET depollute_request=$1 WHERE id=$2", [JSON.stringify(depollute_request), id]);
+
+  return res.json({ success: true, reduction, cost, boost_started: true });
+}
     
 
     return res.status(400).json({ error: 'Unknown action' });
@@ -397,4 +403,232 @@ async function applyEndOfTurnBonuses(game_id, buildings) {
     );
   }
 }
+// ── HELP REQUEST: ask for help on an upgrade ──────────────────
+router.post('/:game_id/help/request', async (req, res) => {
+  try {
+    const { building_id, requester_slot } = req.body;
+    const id = req.params.game_id;
+
+    const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
+    if (game.help_request) return res.status(400).json({ error: 'A help request is already active' });
+
+    const building = (await db.query("SELECT * FROM buildings WHERE id=$1 AND game_id=$2", [building_id, id])).rows[0];
+    if (!building) return res.status(404).json({ error: 'Building not found' });
+
+    let cost = COSTS[building.type]?.[building.level] ?? 4;
+    const event = game.current_event;
+    if (event?.effect === 'upgrade_cost_plus1') cost += 1;
+    if (event?.effect === 'upgrade_cost_minus1' && building.level === 1) cost = Math.max(0, cost - 1);
+
+    const requester = (await db.query("SELECT * FROM players WHERE game_id=$1 AND slot=$2", [id, requester_slot])).rows[0];
+    const needed = Math.max(0, cost - requester.credits);
+
+    const help_request = {
+      building_id, requester_slot, cost,
+      needed, contributions: {}, status: 'open'
+    };
+
+    await db.query("UPDATE games SET help_request=$1 WHERE id=$2", [JSON.stringify(help_request), id]);
+    await addLog(id, game.turn, `🤝 Player ${requester_slot} asks for help to upgrade ${building.type}`);
+
+    res.json({ success: true, help_request });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── HELP REQUEST: contribute credits ───────────────────────────
+router.post('/:game_id/help/contribute', async (req, res) => {
+  try {
+    const { player_slot, amount } = req.body;
+    const id = req.params.game_id;
+
+    const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
+    if (!game.help_request) return res.status(400).json({ error: 'No active help request' });
+
+    const hr = game.help_request;
+    if (hr.status !== 'open') return res.status(400).json({ error: 'Request is closed' });
+    if (player_slot === hr.requester_slot) return res.status(400).json({ error: "Can't contribute to your own request" });
+
+    const player = (await db.query("SELECT * FROM players WHERE game_id=$1 AND slot=$2", [id, player_slot])).rows[0];
+    if (player.credits < amount) return res.status(400).json({ error: 'Not enough credits' });
+
+    await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [amount, id, player_slot]);
+
+    hr.contributions[player_slot] = (hr.contributions[player_slot] || 0) + amount;
+    await db.query("UPDATE games SET help_request=$1 WHERE id=$2", [JSON.stringify(hr), id]);
+
+    await addLog(id, game.turn, `💰 Player ${player_slot} contributes ${amount} cr to help Player ${hr.requester_slot}`);
+
+    res.json({ success: true, help_request: hr });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── HELP REQUEST: launch upgrade (requester confirms) ──────────
+router.post('/:game_id/help/launch', async (req, res) => {
+  try {
+    const { player_slot } = req.body;
+    const id = req.params.game_id;
+
+    const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
+    if (!game.help_request) return res.status(400).json({ error: 'No active help request' });
+
+    const hr = game.help_request;
+    if (player_slot !== hr.requester_slot) return res.status(400).json({ error: 'Only the requester can launch' });
+
+    const requester = (await db.query("SELECT * FROM players WHERE game_id=$1 AND slot=$2", [id, player_slot])).rows[0];
+    const totalContributed = Object.values(hr.contributions).reduce((a, b) => a + b, 0);
+    const totalAvailable = requester.credits + totalContributed;
+
+    if (totalAvailable < hr.cost) {
+      return res.status(400).json({ error: `Not enough total credits (have ${totalAvailable}, need ${hr.cost})` });
+    }
+
+    const building = (await db.query("SELECT * FROM buildings WHERE id=$1 AND game_id=$2", [hr.building_id, id])).rows[0];
+
+    // Pay: requester's own credits first, then contributed pool (already deducted from contributors)
+    await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3",
+      [Math.max(0, hr.cost - totalContributed), id, player_slot]);
+
+    // Any leftover contributed credits beyond the cost are returned to contributors proportionally — simplest: refund excess to requester is wrong, so just give back exact leftover evenly is complex; instead clamp: contributions are capped by cost
+    // (handled simply: if contributions exceed needed, leftover stays with requester as bonus credits is unfair — refund leftover back to contributors)
+    let leftover = totalAvailable - hr.cost;
+    if (leftover > 0) {
+      // refund leftover proportionally to contributors (simple: refund to last contributor(s) in order)
+      const slots = Object.keys(hr.contributions);
+      for (const slot of slots) {
+        if (leftover <= 0) break;
+        const refund = Math.min(leftover, hr.contributions[slot]);
+        await db.query("UPDATE players SET credits=credits+$1 WHERE game_id=$2 AND slot=$3", [refund, id, slot]);
+        leftover -= refund;
+      }
+    }
+
+    await db.query("UPDATE buildings SET level=level+1, owner_slot=$1 WHERE id=$2", [player_slot, hr.building_id]);
+
+    if (building.type === 'centrale_nucleaire' && building.level === 1) {
+      await db.query("UPDATE games SET fossil_level=2, pollution=LEAST(20,pollution+4) WHERE id=$1", [id]);
+    }
+
+    await db.query("UPDATE games SET help_request=NULL WHERE id=$1", [id]);
+    await addLog(id, game.turn, `🏗 Player ${player_slot} upgrades ${building.type} → Lv${building.level + 1} with team help!`);
+    await nextPlayer(id, game);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── HELP REQUEST: cancel (refund everyone) ─────────────────────
+router.post('/:game_id/help/cancel', async (req, res) => {
+  try {
+    const id = req.params.game_id;
+    const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
+    if (!game.help_request) return res.status(400).json({ error: 'No active help request' });
+
+    const hr = game.help_request;
+    for (const [slot, amount] of Object.entries(hr.contributions)) {
+      await db.query("UPDATE players SET credits=credits+$1 WHERE game_id=$2 AND slot=$3", [amount, id, slot]);
+    }
+
+    await db.query("UPDATE games SET help_request=NULL WHERE id=$1", [id]);
+    await addLog(id, game.turn, `❌ Help request cancelled, contributions refunded`);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── DEPOLLUTE BOOST: start group depollution after normal depollute ──
+router.post('/:game_id/depollute-boost/start', async (req, res) => {
+  try {
+    const { initiator_slot } = req.body;
+    const id = req.params.game_id;
+
+    const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
+    if (game.depollute_request) return res.status(400).json({ error: 'Already active' });
+
+    const players = (await db.query("SELECT * FROM players WHERE game_id=$1", [id])).rows;
+    const otherSlots = players.filter(p => p.slot !== initiator_slot).map(p => p.slot);
+
+    const depollute_request = {
+      initiator_slot,
+      confirmed: [],
+      pending: otherSlots,
+      pollution_reduced: 0
+    };
+
+    await db.query("UPDATE games SET depollute_request=$1 WHERE id=$2", [JSON.stringify(depollute_request), id]);
+    res.json({ success: true, depollute_request });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── DEPOLLUTE BOOST: a player pays 2cr for -1 pollution ─────────
+router.post('/:game_id/depollute-boost/contribute', async (req, res) => {
+  try {
+    const { player_slot } = req.body;
+    const id = req.params.game_id;
+
+    const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
+    if (!game.depollute_request) return res.status(400).json({ error: 'No active request' });
+
+    const dr = game.depollute_request;
+    if (dr.confirmed.includes(player_slot)) return res.status(400).json({ error: 'Already confirmed done' });
+
+    const player = (await db.query("SELECT * FROM players WHERE game_id=$1 AND slot=$2", [id, player_slot])).rows[0];
+    if (player.credits < 2) return res.status(400).json({ error: 'Not enough credits' });
+
+    await db.query("UPDATE players SET credits=credits-2 WHERE game_id=$1 AND slot=$2", [id, player_slot]);
+    await db.query("UPDATE games SET pollution=GREATEST(0,pollution-1) WHERE id=$1", [id]);
+
+    dr.pollution_reduced += 1;
+    await db.query("UPDATE games SET depollute_request=$1 WHERE id=$2", [JSON.stringify(dr), id]);
+    await addLog(id, game.turn, `🌱 Player ${player_slot} pays 2cr to reduce pollution by 1 (boost)`);
+
+    res.json({ success: true, depollute_request: dr });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── DEPOLLUTE BOOST: a player marks themselves done ──────────────
+router.post('/:game_id/depollute-boost/done', async (req, res) => {
+  try {
+    const { player_slot } = req.body;
+    const id = req.params.game_id;
+
+    const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
+    if (!game.depollute_request) return res.status(400).json({ error: 'No active request' });
+
+    const dr = game.depollute_request;
+    if (!dr.confirmed.includes(player_slot)) dr.confirmed.push(player_slot);
+
+    const allDone = dr.pending.every(slot => dr.confirmed.includes(slot));
+
+    if (allDone) {
+      await db.query("UPDATE games SET depollute_request=NULL WHERE id=$1", [id]);
+      await addLog(id, game.turn, `✅ Group depollution boost finished (-${dr.pollution_reduced} total)`);
+      await nextPlayer(id, game);
+      return res.json({ success: true, finished: true });
+    }
+
+    await db.query("UPDATE games SET depollute_request=$1 WHERE id=$2", [JSON.stringify(dr), id]);
+    res.json({ success: true, finished: false, depollute_request: dr });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 module.exports = router;
