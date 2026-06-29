@@ -142,7 +142,11 @@ router.post('/:game_id/action', async (req, res) => {
 
       let cost = COSTS[building.type]?.[building.level] ?? 4;
       if (cost === 0) return res.status(400).json({ error: 'This building cannot be upgraded' });
-
+      
+      if (['eolienne','solaire'].includes(building.type) && building.level === 0) {
+  const recherche = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='recherche'", [id])).rows[0];
+  if (recherche?.level >= 2) cost = 3;
+}
       if (event?.effect === 'upgrade_cost_plus1')  cost += 1;
       if (event?.effect === 'upgrade_cost_minus1' && building.level === 1) cost = Math.max(0, cost - 1);
 
@@ -161,28 +165,44 @@ router.post('/:game_id/action', async (req, res) => {
     }
 
     if (action_type === 'depollute') {
-  const ecole = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='ecole'", [id])).rows[0];
-  if (!ecole || ecole.level < 1) return res.status(400).json({ error: 'School must be at Level 1' });
+      const ecole = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='ecole'", [id])).rows[0];
+      if (!ecole || ecole.level < 1) return res.status(400).json({ error: 'School must be at Level 1' });
 
-  const isFree = event?.effect === 'free_depollute';
-  const cost   = isFree ? 0 : 3;
-  if (player.credits < cost) return res.status(400).json({ error: 'Not enough credits' });
+      const isFree = event?.effect === 'free_depollute';
+      const cost   = isFree ? 0 : 3;
+      if (player.credits < cost) return res.status(400).json({ error: 'Not enough credits' });
 
-  const reduction = ecole.level >= 2 ? 2 : 1;
-  await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [cost, id, player_slot]);
-  await db.query("UPDATE games SET pollution=GREATEST(0,pollution-$1) WHERE id=$2", [reduction, id]);
+      const reduction = ecole.level >= 2 ? 2 : 1;
+      await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [cost, id, player_slot]);
+      await db.query("UPDATE games SET pollution=GREATEST(0,pollution-$1) WHERE id=$2", [reduction, id]);
 
-  await addLog(id, game.turn, `🌱 Player ${player_slot} depollutes (-${reduction} pollution, -${cost} cr)`);
+      await addLog(id, game.turn, `🌱 Player ${player_slot} depollutes (-${reduction} pollution, -${cost} cr)`);
 
-  // Start group depollution boost instead of going to next player immediately
-  const players = (await db.query("SELECT * FROM players WHERE game_id=$1", [id])).rows;
-  const otherSlots = players.filter(p => p.slot !== player_slot).map(p => p.slot);
-  const depollute_request = { initiator_slot: player_slot, confirmed: [], pending: otherSlots, pollution_reduced: 0 };
-  await db.query("UPDATE games SET depollute_request=$1 WHERE id=$2", [JSON.stringify(depollute_request), id]);
+      // Start group depollution boost
+      const players = (await db.query("SELECT * FROM players WHERE game_id=$1", [id])).rows;
+      const otherSlots = players.filter(p => p.slot !== player_slot).map(p => p.slot);
+      const depollute_request = { initiator_slot: player_slot, confirmed: [], pending: otherSlots, pollution_reduced: 0 };
+      await db.query("UPDATE games SET depollute_request=$1 WHERE id=$2", [JSON.stringify(depollute_request), id]);
 
-  return res.json({ success: true, reduction, cost, boost_started: true });
-}
-    
+      return res.json({ success: true, reduction, cost, boost_started: true });
+    }
+
+    if (action_type === 'dismantle') {
+      const building = (await db.query("SELECT * FROM buildings WHERE id=$1 AND game_id=$2", [building_id, id])).rows[0];
+      if (!building || building.type !== 'centrale_nucleaire') return res.status(400).json({ error: 'Not the power plant' });
+      if (building.level === 0) return res.status(400).json({ error: 'Already dismantled' });
+
+      const cost = 16;
+      if (player.credits < cost) return res.status(400).json({ error: `Not enough credits (need ${cost} cr)` });
+
+      await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [cost, id, player_slot]);
+      await db.query("UPDATE buildings SET level=0, owner_slot=NULL WHERE id=$1", [building_id]);
+      await db.query("UPDATE games SET fossil_level=0, pollution=GREATEST(0,pollution-10) WHERE id=$1", [id]);
+
+      await addLog(id, game.turn, `☢️ Player ${player_slot} dismantled the Nuclear Power Plant (-16 cr, -10 pollution)`);
+      await nextPlayer(id, game);
+      return res.json({ success: true });
+    }
 
     return res.status(400).json({ error: 'Unknown action' });
   } catch (err) {

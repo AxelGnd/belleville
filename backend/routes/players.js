@@ -17,12 +17,11 @@ router.post('/join', async (req, res) => {
       game_id = newGame.rows[0].id;
 
       const buildings = [
-        'hopital','ecole','recherche',
-        'residentiel','residentiel','residentiel',
-        'eolienne','eolienne','solaire','solaire',
-        'parc','parc','parc',
-        
-      ];
+  'hopital','ecole','recherche',
+  'residentiel','residentiel','residentiel',
+  'eolienne','eolienne','solaire','solaire',
+  'parc',
+];
       for (const type of buildings) {
         await db.query(
           "INSERT INTO buildings (game_id, type, level) VALUES ($1,$2,0)",

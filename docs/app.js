@@ -705,13 +705,15 @@ function showBuildMenu() {
           <div style="display:flex;gap:8px">
             ${canUpgrade ? `
               <div style="text-align:center">
-                <div class="build-cost">💰 2 cr</div>
-                <button class="build-btn ${me?.credits < 2 ? 'disabled':''}" ${me?.credits < 2 ? 'disabled':''}
+                <div class="build-cost">💰 4 cr</div>
+                <button class="build-btn ${me?.credits < 4 ? 'disabled':''}" ${me?.credits < 4 ? 'disabled':''}
                   onclick="doAction('upgrade',${centrale.id});closeModal()">Lv 1→2</button>
               </div>` : ''}
             ${canDismantle ? `
-              <button class="build-btn" style="background:#ef4444" onclick="dismantlePlant(${centrale.id});closeModal()">Dismantle</button>
-            ` : ''}
+  <button class="build-btn" style="background:#ef4444" onclick="dismantlePlant(${centrale.id});closeModal()">
+    ☢️ Dismantle (16 cr)
+  </button>
+` : ''}
           </div>
         </div>
       `;
@@ -799,8 +801,18 @@ const btn1 = canBuy1 ? `
   window._currentModal = modal;
 }
 async function dismantlePlant(building_id) {
-  if (!confirm('Dismantle the Nuclear Power Plant? This cannot be undone.')) return;
-  await doAction('dismantle', building_id);
+  if (!confirm('Dismantle the Nuclear Power Plant for 16 cr? Pollution -10. This cannot be undone.')) return;
+
+  const res = await fetch(`${API}/game/${state.game_id}/action`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ player_slot: state.player_slot, action_type: 'dismantle', building_id }),
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error);
+  alert('☢️ Nuclear Power Plant dismantled! -10 pollution!');
+  socket.emit('game_update', { game_id: state.game_id });
+  loadGame();
 }
 function closeModal() {
   if (window._currentModal) {
