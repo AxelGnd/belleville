@@ -437,14 +437,18 @@ function renderGame(data) {
   let phaseZone = '';
 
   if (game.phase === 'event') {
-    phaseZone = `
-      <div class="phase-banner event">
-        <div class="phase-label">📅 Phase 1 — Event</div>
-        <div class="phase-desc">Draw the event card to start turn ${game.turn}.</div>
-        <button class="btn btn-primary" onclick="drawEvent()">🎴 Draw event card</button>
+  phaseZone = `
+    <div class="phase-banner event">
+      <div class="phase-label">📅 Phase 1 — Event</div>
+      <div class="phase-desc">Player 1 enters the event number from the card deck.</div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input id="event-number" type="number" min="1" max="13" placeholder="Event # (1-13)"
+          style="flex:1;padding:8px 12px;background:#0f1923;border:1px solid #2d3f50;border-radius:8px;color:#fff;font-size:14px;outline:none" />
+        <button class="btn btn-primary" style="width:auto;padding:8px 16px;margin:0" onclick="submitEvent()">→</button>
       </div>
-    `;
-  }
+    </div>
+  `;
+}
 
   if (game.phase === 'actions') {
     if (event) {
@@ -729,10 +733,9 @@ function showBuildMenu() {
       if (cost0 > 0) cost0 += 1;
       if (cost1 > 0) cost1 += 1;
     }
-    if (currentEvent?.effect === 'upgrade_cost_minus1') {
-      cost1 = Math.max(0, cost1 - 1);
-    }
-
+    if (currentEvent?.effect === 'upgrade_cost_minus2') {
+  cost1 = Math.max(0, cost1 - 2);
+}
     const canBuy0 = hasLv0 && cost0 > 0;
     const canBuy1 = hasLv1 && cost1 > 0 && (type === 'recherche' || rechercheOk);
 
@@ -861,13 +864,68 @@ function showDepolluteInitiatorWaitView() {
 }
 
 async function drawEvent() {
-  const res  = await fetch(`${API}/game/${state.game_id}/draw-event`, { method: 'POST' });
+  const num = document.getElementById('event-number')?.value;
+  const res = await fetch(`${API}/game/${state.game_id}/draw-event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event_number: num || null }),
+  });
   const data = await res.json();
   if (!res.ok) return alert(data.error);
-  socket.emit('game_update', { game_id: state.game_id });
-  loadGame();
+
+  // Affiche la popup de l'événement
+  showEventPopup(data.event);
 }
 
+async function submitEvent() {
+  await drawEvent();
+}
+
+function showEventPopup(event) {
+  const typeColor = event.type === 'crisis' ? '#ef4444' : event.type === 'opportunity' ? '#22c55e' : '#f59e0b';
+  const typeBg    = event.type === 'crisis' ? '#450a0a' : event.type === 'opportunity' ? '#14532d' : '#1c1917';
+
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-sheet">
+      <div class="modal-handle"></div>
+      <div style="display:inline-block;padding:3px 10px;border-radius:20px;background:${typeBg};color:${typeColor};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">
+        #${event.id} · ${event.type}
+      </div>
+      <div style="font-size:20px;font-weight:800;margin-bottom:12px">${event.title}</div>
+      <div style="font-size:13px;color:#9ca3af;line-height:1.7;margin-bottom:1.5rem">${event.desc}</div>
+      <div style="background:${typeBg}33;border:1px solid ${typeColor}44;border-radius:10px;padding:12px;margin-bottom:1.5rem">
+        <div style="font-size:11px;color:${typeColor};text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Effect on the game</div>
+        <div style="font-size:13px;color:#d1d5db">${getEffectDescription(event)}</div>
+      </div>
+      <button class="btn btn-primary" style="margin:0" onclick="closeModal();loadGame()">Start turn →</button>
+    </div>
+  `;
+  modal.addEventListener('click', e => { if (e.target === modal) { closeModal(); loadGame(); } });
+  document.body.appendChild(modal);
+  window._currentModal = modal;
+
+  socket.emit('game_update', { game_id: state.game_id });
+}
+
+function getEffectDescription(event) {
+  const effects = {
+    'demand_plus1_all':    '⚡ All buildings with level > 0 consume +1 Energy this round.',
+    'toxic_leak':          '☣️ If Hospital < Lv2: +2 Pollution immediately.',
+    'upgrade_cost_plus1':  '🔨 All building upgrades cost +1 cr this round.',
+    'green_zero':          '☁️ All Green Energy installations produce 0 this round.',
+    'respiratory_crisis':  '😷 Lv2: nothing. Lv1: -1 cr each. Lv0: -2 cr each.',
+    'park_zero':           '🌵 Parks lose their passive pollution reduction this round.',
+    'all_gain2cr':         '💰 Every player receives +2 Credits now.',
+    'upgrade_cost_minus2': '🔬 Level 2 upgrades cost -2 cr this round.',
+    'free_depollute':      '🌱 The next Depollution Campaign action is free.',
+    'pollution_minus1':    '🚲 Pollution reduced by 1 immediately.',
+    'elections':           '🗳️ If no Grand Project is funded this round: +1 Pollution.',
+    'audit':               '📋 Fossil Lv2: +2 Poll. Lv1: +1 Poll. Dismantled: -1 Poll.',
+  };
+  return effects[event.effect] || event.desc;
+}
 async function endTurn() {
   const res  = await fetch(`${API}/game/${state.game_id}/end-turn`, { method: 'POST' });
   const data = await res.json();

@@ -3,19 +3,23 @@ const router  = express.Router();
 const db      = require('../db/connection');
 
 const EVENTS = [
-  { id:'cold_wave',     type:'crisis',       title:'Cold Wave',              desc:'All Residential buildings consume +1 Energy this turn.',  effect:'demand_plus1_residential' },
-  { id:'toxic_leak',    type:'crisis',       title:'Toxic Leak',             desc:'+2 Pollution immediately.',                               effect:'pollution_plus2' },
-  { id:'shortage',      type:'crisis',       title:'Material Shortage',      desc:'Upgrading costs +1 CR this turn.',                        effect:'upgrade_cost_plus1' },
-  { id:'no_wind',       type:'crisis',       title:'Cloudy & No Wind',       desc:'Green Energy produces 0 this turn.',                      effect:'green_zero' },
-  { id:'health_crisis', type:'crisis',       title:'Respiratory Crisis',     desc:'Each player loses 2 CR.',                                 effect:'all_lose2cr' },
-  { id:'subsidy',       type:'opportunity',  title:'European Subsidies',     desc:'Each player receives +2 CR.',                             effect:'all_gain2cr' },
-  { id:'tech_advance',  type:'opportunity',  title:'Tech Breakthrough',      desc:'Upgrading to Lv2 costs 1 CR less this turn.',             effect:'upgrade_cost_minus1' },
-  { id:'earth_day',     type:'opportunity',  title:'Earth Day',              desc:'Next depollution this turn is free.',                     effect:'free_depollute' },
-  { id:'sunny_day',     type:'opportunity',  title:'Sunny Day',              desc:'Green Energy produces +1 extra this turn.',               effect:'green_plus1' },
-  { id:'elections',     type:'neutral',      title:'Municipal Elections',    desc:'No Grand Project this turn: +1 Pollution.',               effect:'elections' },
-  { id:'audit',         type:'neutral',      title:'Ecological Audit',       desc:'Fossil Lv2: +2 Poll. Fossil Lv1: -1 Poll.',              effect:'audit' },
+  // Crises
+  { id: 1,  type:'crisis',      title:'Cold Wave',                desc:'All buildings consume +1 Energy this round.',                          effect:'demand_plus1_all' },
+  { id: 2,  type:'crisis',      title:'Heat Wave',                desc:'All buildings consume +1 Energy this round.',                          effect:'demand_plus1_all' },
+  { id: 3,  type:'crisis',      title:'Toxic Leak',               desc:'Hospital Lv2: nothing. Hospital Lv1/0: +2 Pollution.',                 effect:'toxic_leak' },
+  { id: 4,  type:'crisis',      title:'Material Shortage',        desc:'All building upgrades cost +1 Credit this round.',                     effect:'upgrade_cost_plus1' },
+  { id: 5,  type:'crisis',      title:'Overcast Skies & No Wind', desc:'Green Energy installations produce 0 Energy this round.',              effect:'green_zero' },
+  { id: 6,  type:'crisis',      title:'Respiratory Crisis',       desc:'Hospital Lv2: nothing. Lv1: -1 cr each. Lv0: -2 cr each.',            effect:'respiratory_crisis' },
+  { id: 7,  type:'crisis',      title:'Severe Drought',           desc:'Parks lose their effect this round.',                                  effect:'park_zero' },
+  // Opportunités
+  { id: 8,  type:'opportunity', title:'European Grants',          desc:'Each player gains 2 Credits.',                                         effect:'all_gain2cr' },
+  { id: 9,  type:'opportunity', title:'Technological Breakthrough',desc:'Level 2 upgrades cost 2 fewer Credits this round.',                   effect:'upgrade_cost_minus2' },
+  { id: 10, type:'opportunity', title:'Earth Day',                desc:'The next Pollution Cleanup action is free.',                           effect:'free_depollute' },
+  { id: 11, type:'opportunity', title:'New Bike Lanes',           desc:'Reduce Pollution by 1 immediately.',                                   effect:'pollution_minus1' },
+  // Neutres
+  { id: 12, type:'neutral',     title:'Municipal Elections',      desc:'If no Grand Project is funded this round: +1 Pollution.',              effect:'elections' },
+  { id: 13, type:'neutral',     title:'Environmental Audit',      desc:'Fossil Lv2: +2 Poll. Fossil Lv1: +1 Poll. Dismantled: -1 Poll.',      effect:'audit' },
 ];
-
 const COSTS = {
   hopital:            [5, 8],
   ecole:              [5, 8],
@@ -68,39 +72,65 @@ router.post('/:game_id/start', async (req, res) => {
 // ── POST draw-event ──────────────────────────────────────────
 router.post('/:game_id/draw-event', async (req, res) => {
   try {
-    const id   = req.params.game_id;
+    const id = req.params.game_id;
+    const { event_number } = req.body;
     const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
 
     if (game.phase !== 'event') return res.status(400).json({ error: 'Not in Event phase' });
 
-    const event = EVENTS[Math.floor(Math.random() * EVENTS.length)];
+    const event = event_number
+      ? EVENTS.find(e => e.id === parseInt(event_number))
+      : EVENTS[Math.floor(Math.random() * EVENTS.length)];
 
-    if (event.effect === 'pollution_plus2') {
-      await db.query("UPDATE games SET pollution=LEAST(20, pollution+2) WHERE id=$1", [id]);
-    }
-    if (event.effect === 'all_gain2cr') {
-      await db.query("UPDATE players SET credits=credits+2 WHERE game_id=$1", [id]);
-    }
-    if (event.effect === 'all_lose2cr') {
+    if (!event) return res.status(400).json({ error: `Event #${event_number} not found` });
+
+    // ── Effets immédiats ─────────────────────────────────────
+    if (event.effect === 'toxic_leak') {
       const hopital = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='hopital'", [id])).rows[0];
       if (!hopital || hopital.level < 2) {
+        await db.query("UPDATE games SET pollution=LEAST(20,pollution+2) WHERE id=$1", [id]);
+      }
+    }
+
+    if (event.effect === 'respiratory_crisis') {
+      const hopital = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='hopital'", [id])).rows[0];
+      const lvl = hopital?.level ?? 0;
+      if (lvl >= 2) {
+        // rien
+      } else if (lvl === 1) {
+        await db.query("UPDATE players SET credits=GREATEST(0,credits-1) WHERE game_id=$1", [id]);
+      } else {
         await db.query("UPDATE players SET credits=GREATEST(0,credits-2) WHERE game_id=$1", [id]);
       }
     }
+
+    if (event.effect === 'all_gain2cr') {
+      await db.query("UPDATE players SET credits=credits+2 WHERE game_id=$1", [id]);
+    }
+
+    if (event.effect === 'pollution_minus1') {
+      await db.query("UPDATE games SET pollution=GREATEST(0,pollution-1) WHERE id=$1", [id]);
+    }
+
     if (event.effect === 'audit') {
       const centrale = (await db.query("SELECT * FROM buildings WHERE game_id=$1 AND type='centrale_nucleaire'", [id])).rows[0];
-      if (centrale?.level >= 2) {
-        await db.query("UPDATE games SET pollution=LEAST(20, pollution+2) WHERE id=$1", [id]);
+      const lvl = centrale?.level ?? 0;
+      if (lvl >= 2) {
+        await db.query("UPDATE games SET pollution=LEAST(20,pollution+2) WHERE id=$1", [id]);
+      } else if (lvl === 1) {
+        await db.query("UPDATE games SET pollution=LEAST(20,pollution+1) WHERE id=$1", [id]);
       } else {
-        await db.query("UPDATE games SET pollution=GREATEST(0, pollution-1) WHERE id=$1", [id]);
+        await db.query("UPDATE games SET pollution=GREATEST(0,pollution-1) WHERE id=$1", [id]);
       }
     }
 
+    // ── Passe en phase actions ───────────────────────────────
     await db.query(
       "UPDATE games SET phase='actions', current_player_slot=1, current_event=$2 WHERE id=$1",
       [id, JSON.stringify(event)]
     );
-    await addLog(id, game.turn, `🎴 Event: ${event.title} — ${event.desc}`);
+
+    await addLog(id, game.turn, `🎴 Event #${event.id}: ${event.title} — ${event.desc}`);
 
     res.json({ event });
   } catch (err) {
@@ -148,7 +178,7 @@ router.post('/:game_id/action', async (req, res) => {
   if (recherche?.level >= 2) cost = 3;
 }
       if (event?.effect === 'upgrade_cost_plus1')  cost += 1;
-      if (event?.effect === 'upgrade_cost_minus1' && building.level === 1) cost = Math.max(0, cost - 1);
+      if (event?.effect === 'upgrade_cost_minus2' && building.level === 1) cost = Math.max(0, cost - 2);
 
       if (player.credits < cost) return res.status(400).json({ error: `Not enough credits (need: ${cost})` });
 
@@ -227,24 +257,26 @@ router.post('/:game_id/end-turn', async (req, res) => {
     let green  = 0;
 
     for (const b of buildings) {
-      if (['hopital','ecole','recherche','centrale_nucleaire'].includes(b.type)) {
-        demand += b.level;
-      }
-      if (b.type === 'residentiel') {
-        if (b.level === 1) demand += 2;
-        if (b.level === 2) demand += 1;
-        if (event?.effect === 'demand_plus1_residential' && b.level > 0) demand += 1;
-      }
-      if (['eolienne','solaire'].includes(b.type) && b.level > 0) {
-        let prod = b.level;
-        if (event?.effect === 'green_zero')  prod = 0;
-        if (event?.effect === 'green_plus1') prod += 1;
-        green += prod;
-      }
-      if (b.type === 'parc' && b.level > 0) {
-        await db.query("UPDATE games SET pollution=GREATEST(0,pollution-$1) WHERE id=$2", [b.level, id]);
-      }
-    }
+  if (['hopital','ecole','recherche','centrale_nucleaire'].includes(b.type)) {
+    let lvl = b.level;
+    if (event?.effect === 'demand_plus1_all') lvl += (lvl > 0 ? 1 : 0);
+    demand += lvl;
+  }
+  if (b.type === 'residentiel') {
+    if (b.level === 1) demand += 2;
+    if (b.level === 2) demand += 1;
+    if (event?.effect === 'demand_plus1_all' && b.level > 0) demand += 1;
+  }
+  if (['eolienne','solaire'].includes(b.type) && b.level > 0) {
+    let prod = b.level;
+    if (event?.effect === 'green_zero') prod = 0;
+    green += prod;
+  }
+  if (b.type === 'parc' && b.level > 0 && event?.effect !== 'park_zero') {
+    await db.query("UPDATE games SET pollution=GREATEST(0,pollution-$1) WHERE id=$2", [b.level, id]);
+  }
+}
+    
 
     const centrale = buildings.find(b => b.type === 'centrale_nucleaire');
     const fossilLevel = centrale?.level ?? 0;
