@@ -662,7 +662,7 @@ function showBuildMenu() {
     eolienne:           [4, 6],
     solaire:            [4, 6],
     parc:               [13, 20],
-    centrale_nucleaire: [0, 2],
+    centrale_nucleaire: [0, 4],
   };
 
   const grouped = {};
@@ -824,7 +824,7 @@ function closeModal() {
 // ── Actions ──────────────────────────────────────────────────
 async function doAction(action_type, building_id = null) {
   const body = { player_slot: state.player_slot, action_type };
-  if (building_id) body.building_id = building_id;
+  if (building_id !== null) body.building_id = building_id;
 
   const res = await fetch(`${API}/game/${state.game_id}/action`, {
     method: 'POST',
@@ -842,7 +842,6 @@ async function doAction(action_type, building_id = null) {
 
   loadGame();
 }
-
 function showDepolluteInitiatorWaitView() {
   stopPolling();
   show(`

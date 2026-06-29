@@ -188,21 +188,22 @@ router.post('/:game_id/action', async (req, res) => {
     }
 
     if (action_type === 'dismantle') {
-      const building = (await db.query("SELECT * FROM buildings WHERE id=$1 AND game_id=$2", [building_id, id])).rows[0];
-      if (!building || building.type !== 'centrale_nucleaire') return res.status(400).json({ error: 'Not the power plant' });
-      if (building.level === 0) return res.status(400).json({ error: 'Already dismantled' });
+  const bid = parseInt(building_id);
+  const building = (await db.query("SELECT * FROM buildings WHERE id=$1 AND game_id=$2", [bid, id])).rows[0];
+  if (!building || building.type !== 'centrale_nucleaire') return res.status(400).json({ error: 'Not the power plant' });
+  if (building.level === 0) return res.status(400).json({ error: 'Already dismantled' });
 
-      const cost = 16;
-      if (player.credits < cost) return res.status(400).json({ error: `Not enough credits (need ${cost} cr)` });
+  const cost = 16;
+  if (player.credits < cost) return res.status(400).json({ error: `Not enough credits (need ${cost} cr)` });
 
-      await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [cost, id, player_slot]);
-      await db.query("UPDATE buildings SET level=0, owner_slot=NULL WHERE id=$1", [building_id]);
-      await db.query("UPDATE games SET fossil_level=0, pollution=GREATEST(0,pollution-10) WHERE id=$1", [id]);
+  await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [cost, id, player_slot]);
+  await db.query("UPDATE buildings SET level=0, owner_slot=NULL WHERE id=$1", [bid]);
+  await db.query("UPDATE games SET fossil_level=0, pollution=GREATEST(0,pollution-10) WHERE id=$1", [id]);
 
-      await addLog(id, game.turn, `☢️ Player ${player_slot} dismantled the Nuclear Power Plant (-16 cr, -10 pollution)`);
-      await nextPlayer(id, game);
-      return res.json({ success: true });
-    }
+  await addLog(id, game.turn, `☢️ Player ${player_slot} dismantled the Nuclear Power Plant (-16 cr, -10 pollution)`);
+  await nextPlayer(id, game);
+  return res.json({ success: true });
+}
 
     return res.status(400).json({ error: 'Unknown action' });
   } catch (err) {
