@@ -502,17 +502,24 @@ router.post('/:game_id/help/contribute', async (req, res) => {
 
     const hr = game.help_request;
     if (hr.status !== 'open') return res.status(400).json({ error: 'Request is closed' });
-    if (player_slot === hr.requester_slot) return res.status(400).json({ error: "Can't contribute to your own request" });
+    if (player_slot === hr.requester_slot) return res.status(400).json({ error: "Use requester-contribute instead" });
 
     const player = (await db.query("SELECT * FROM players WHERE game_id=$1 AND slot=$2", [id, player_slot])).rows[0];
     if (player.credits < amount) return res.status(400).json({ error: 'Not enough credits' });
 
-    await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [amount, id, player_slot]);
+    // Calcule combien il manque encore
+    const totalContributed = Object.values(hr.contributions).reduce((a,b) => a+b, 0);
+    const requesterContrib = hr.requester_contribution ?? 0;
+    const alreadyCovered = requesterContrib + totalContributed;
+    const stillNeeded = Math.max(0, hr.cost - alreadyCovered);
 
+    if (stillNeeded === 0) return res.status(400).json({ error: 'Already enough credits collected' });
+    if (amount > stillNeeded) return res.status(400).json({ error: `Too much! Only ${stillNeeded} cr still needed` });
+
+    await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [amount, id, player_slot]);
     hr.contributions[player_slot] = (hr.contributions[player_slot] || 0) + amount;
     await db.query("UPDATE games SET help_request=$1 WHERE id=$2", [JSON.stringify(hr), id]);
-
-    await addLog(id, game.turn, `💰 Player ${player_slot} contributes ${amount} cr to help Player ${hr.requester_slot}`);
+    await addLog(id, game.turn, `💰 Player ${player_slot} contributes ${amount} cr`);
 
     res.json({ success: true, help_request: hr });
   } catch (err) {
@@ -533,34 +540,22 @@ router.post('/:game_id/help/launch', async (req, res) => {
     const hr = game.help_request;
     if (player_slot !== hr.requester_slot) return res.status(400).json({ error: 'Only the requester can launch' });
 
-    const requester = (await db.query("SELECT * FROM players WHERE game_id=$1 AND slot=$2", [id, player_slot])).rows[0];
-    const totalContributed = Object.values(hr.contributions).reduce((a, b) => a + b, 0);
-    const totalAvailable = requester.credits + totalContributed;
+    const totalContributed   = Object.values(hr.contributions).reduce((a,b) => a+b, 0);
+    const requesterContrib   = hr.requester_contribution ?? 0;
+    const totalAvailable     = requesterContrib + totalContributed;
 
     if (totalAvailable < hr.cost) {
       return res.status(400).json({ error: `Not enough total credits (have ${totalAvailable}, need ${hr.cost})` });
     }
 
+    // Déduit la contribution du demandeur
+    await db.query(
+      "UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3",
+      [requesterContrib, id, player_slot]
+    );
+
+    // Améliore le bâtiment
     const building = (await db.query("SELECT * FROM buildings WHERE id=$1 AND game_id=$2", [hr.building_id, id])).rows[0];
-
-    // Pay: requester's own credits first, then contributed pool (already deducted from contributors)
-    await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3",
-      [Math.max(0, hr.cost - totalContributed), id, player_slot]);
-
-    // Any leftover contributed credits beyond the cost are returned to contributors proportionally — simplest: refund excess to requester is wrong, so just give back exact leftover evenly is complex; instead clamp: contributions are capped by cost
-    // (handled simply: if contributions exceed needed, leftover stays with requester as bonus credits is unfair — refund leftover back to contributors)
-    let leftover = totalAvailable - hr.cost;
-    if (leftover > 0) {
-      // refund leftover proportionally to contributors (simple: refund to last contributor(s) in order)
-      const slots = Object.keys(hr.contributions);
-      for (const slot of slots) {
-        if (leftover <= 0) break;
-        const refund = Math.min(leftover, hr.contributions[slot]);
-        await db.query("UPDATE players SET credits=credits+$1 WHERE game_id=$2 AND slot=$3", [refund, id, slot]);
-        leftover -= refund;
-      }
-    }
-
     await db.query("UPDATE buildings SET level=level+1, owner_slot=$1 WHERE id=$2", [player_slot, hr.building_id]);
 
     if (building.type === 'centrale_nucleaire' && building.level === 1) {
@@ -586,12 +581,22 @@ router.post('/:game_id/help/cancel', async (req, res) => {
     if (!game.help_request) return res.status(400).json({ error: 'No active help request' });
 
     const hr = game.help_request;
+
+    // Rembourse les contributeurs
     for (const [slot, amount] of Object.entries(hr.contributions)) {
       await db.query("UPDATE players SET credits=credits+$1 WHERE game_id=$2 AND slot=$3", [amount, id, slot]);
     }
 
+    // Rembourse le demandeur si il avait déjà mis une contribution
+    if (hr.requester_contribution > 0) {
+      await db.query(
+        "UPDATE players SET credits=credits+$1 WHERE game_id=$2 AND slot=$3",
+        [hr.requester_contribution, id, hr.requester_slot]
+      );
+    }
+
     await db.query("UPDATE games SET help_request=NULL WHERE id=$1", [id]);
-    await addLog(id, game.turn, `❌ Help request cancelled, contributions refunded`);
+    await addLog(id, game.turn, `❌ Help request cancelled, all contributions refunded`);
 
     res.json({ success: true });
   } catch (err) {

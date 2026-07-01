@@ -954,7 +954,7 @@ async function endTurn() {
 
 // ── Écran de fin ─────────────────────────────────────────────
 function showEndScreen(won, winners) {
-  stopPolling();
+  stopPolling(); // ← arrête tout polling
 
   if (won) {
     const winnerCards = winners.map(w => {
@@ -982,7 +982,7 @@ function showEndScreen(won, winners) {
         <h1 style="color:#22c55e;margin-bottom:0.5rem">Victory!</h1>
         <p style="margin-bottom:2rem">A player has completed their secret objective!</p>
         ${winnerCards}
-        <button class="btn btn-secondary" style="margin-top:1rem" onclick="renderWelcome()">New game</button>
+        <button class="btn btn-primary" style="margin-top:1rem" onclick="newGame()">🌿 New game</button>
       </div>
     `);
   } else {
@@ -991,16 +991,27 @@ function showEndScreen(won, winners) {
         <div style="font-size:64px;margin-bottom:1rem">💀</div>
         <h1 style="color:#ef4444;margin-bottom:0.5rem">Defeat!</h1>
         <p style="margin-bottom:2rem">Pollution reached 20. The city is lost.</p>
-        <button class="btn btn-secondary" onclick="renderWelcome()">New game</button>
+        <button class="btn btn-primary" onclick="newGame()">🌿 New game</button>
       </div>
     `);
   }
-
-  socket.emit('game_update', { game_id: state.game_id });
 }
 
-socket.on('state_update', () => {
-  if (state.game_id) loadGame();
+async function newGame() {
+  // Réinitialise le state local
+  state.game_id     = null;
+  state.player_slot = null;
+  state.pseudo      = null;
+  state.role        = null;
+  renderWelcome();
+}
+
+socket.on('state_update', async () => {
+  if (!state.game_id) return;
+  const res  = await fetch(`${API}/game/${state.game_id}/state`);
+  const data = await res.json();
+  if (data.game?.status === 'won' || data.game?.status === 'lost') return; // ne pas recharger
+  renderGame(data);
 });
 async function blackoutDowngrade(building_id) {
   const res  = await fetch(`${API}/game/${state.game_id}/blackout-downgrade`, {
