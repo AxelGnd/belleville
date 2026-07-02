@@ -1067,8 +1067,10 @@ function renderHelpView(hr, players) {
   if (!hr) { stopPolling(); loadGame(); return; }
 
   // Ne pas re-rendre (et donc écraser le champ) pendant que le joueur tape
-  const activeInput = document.getElementById('my-contrib-input');
-  if (activeInput && document.activeElement === activeInput) return;
+   const activeInput = document.getElementById('my-contrib-input');
+  if (activeInput) {
+    state.pendingContribAmount = activeInput.value;
+  }
 
   // On garde une référence pour submitMyContribution() (évite un fetch + une race condition)
   state.currentHelpRequest = hr;
@@ -1090,7 +1092,7 @@ function renderHelpView(hr, players) {
     : (hr.contributions[state.player_slot] || 0);
 
   // Max que je peux encore ajouter maintenant (delta, pas total)
-  const maxICanAdd = Math.min(me?.credits ?? 0, stillNeeded);
+  const maxICanAdd = Math.max(0, Math.min(me?.credits ?? 0, stillNeeded));
 
   // Barre de progression
   const pct = Math.min(100, (totalEngaged / hr.cost) * 100);
@@ -1142,10 +1144,11 @@ function renderHelpView(hr, players) {
         `).join('')}
       </div>
       <div style="display:flex;gap:8px;margin-bottom:1rem">
-        <input id="my-contrib-input" type="number" min="0" max="${maxICanAdd}"
-          value=""
-          placeholder="Amount to add"
-          style="flex:1;padding:10px 12px;background:#0f1923;border:1px solid #2d3f50;border-radius:8px;color:#fff;font-size:15px;outline:none" />
+<input id="my-contrib-input" type="number" min="0" max="${maxICanAdd}"
+  value="${state.pendingContribAmount ?? ''}"
+  oninput="state.pendingContribAmount = this.value"
+  placeholder="Amount to add"
+  style="flex:1;padding:10px 12px;background:#0f1923;border:1px solid #2d3f50;border-radius:8px;color:#fff;font-size:15px;outline:none" />
         <button class="build-btn" style="padding:10px 16px" onclick="submitMyContribution()">Add</button>
       </div>
 
@@ -1165,8 +1168,9 @@ function renderHelpView(hr, players) {
 
 async function submitMyContribution() {
   const input = document.getElementById('my-contrib-input');
-  const amount = parseInt(input?.value) || 0;
+  const amount = parseInt(input?.value ?? state.pendingContribAmount) || 0;
   if (amount <= 0) return alert('Enter an amount greater than 0');
+  state.pendingContribAmount = '';
   await sendContribution(amount);
 }
 
@@ -1187,6 +1191,7 @@ async function sendContribution(amount) {
   const data = await res.json();
   if (!res.ok) return alert(data.error);
   state.currentHelpRequest = data.help_request;
+  state.pendingContribAmount = ''; // reset après envoi réussi
   const players = await fetch(`${API}/game/${state.game_id}/state`).then(r => r.json()).then(d => d.players);
   renderHelpView(data.help_request, players);
   socket.emit('game_update', { game_id: state.game_id });
