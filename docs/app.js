@@ -929,16 +929,17 @@ function getEffectDescription(event) {
 async function endTurn() {
   const res  = await fetch(`${API}/game/${state.game_id}/end-turn`, { method: 'POST' });
   const data = await res.json();
-  if (!res.ok) { alert(data.error); return; }
+  if (!res.ok) {
+    alert(data.error);
+    return;
+  }
 
   if (data.lost) {
-    socket.emit('game_end', { game_id: state.game_id, won: false, winners: [] });
     showEndScreen(false, []);
     return;
   }
 
   if (data.winners && data.winners.length > 0) {
-    socket.emit('game_end', { game_id: state.game_id, won: true, winners: data.winners });
     showEndScreen(true, data.winners);
     return;
   }
@@ -951,10 +952,6 @@ async function endTurn() {
   loadGame();
 }
 
-socket.on('game_ended', ({ won, winners }) => {
-  stopPolling();
-  showEndScreen(won, winners);
-});
 // ── Écran de fin ─────────────────────────────────────────────
 function showEndScreen(won, winners) {
   stopPolling(); // ← arrête tout polling
@@ -1013,8 +1010,7 @@ socket.on('state_update', async () => {
   if (!state.game_id) return;
   const res  = await fetch(`${API}/game/${state.game_id}/state`);
   const data = await res.json();
-  if (data.game?.status === 'won') { stopPolling(); showEndScreen(true, data.game.winners_cache || []); return; }
-  if (data.game?.status === 'lost') { stopPolling(); showEndScreen(false, []); return; }
+  if (data.game?.status === 'won' || data.game?.status === 'lost') return; // ne pas recharger
   renderGame(data);
 });
 async function blackoutDowngrade(building_id) {
@@ -1052,48 +1048,124 @@ async function requestHelp(building_id) {
 
 function showHelpRequesterView() {
   stopPolling();
-
+  fetch(`${API}/game/${state.game_id}/state`).then(r => r.json()).then(data => {
+    if (data.game.help_request) renderHelpView(data.game.help_request, data.players);
+    else { loadGame(); }
+  });
   pollingInterval = setInterval(async () => {
     const res = await fetch(`${API}/game/${state.game_id}/state`);
     const data = await res.json();
-    if (!data.game.help_request) {
-      stopPolling();
-      loadGame();
-      return;
-    }
-    renderHelpRequesterView(data.game.help_request, data.players);
+    if (!data.game.help_request) { stopPolling(); loadGame(); return; }
+    renderHelpView(data.game.help_request, data.players);
   }, 1500);
-
-  fetch(`${API}/game/${state.game_id}/state`).then(r => r.json()).then(data => {
-    renderHelpRequesterView(data.game.help_request, data.players);
-  });
 }
 
-function renderHelpRequesterView(hr, players) {
+function renderHelpContributorView(hr, players) {
+  showHelpRequesterView();
+}
+
+function renderHelpView(hr, players) {
   if (!hr) { stopPolling(); loadGame(); return; }
 
-  const totalContributed = Object.values(hr.contributions).reduce((a,b) => a+b, 0);
   const me = players.find(p => p.slot === state.player_slot);
-  const totalAvailable = (me?.credits ?? 0) + totalContributed;
-  const canLaunch = totalAvailable >= hr.cost;
+  const isRequester = state.player_slot === hr.requester_slot;
+  const requester = players.find(p => p.slot === hr.requester_slot);
 
-  const contribRows = Object.entries(hr.contributions).map(([slot, amount]) => {
-    const p = players.find(pp => pp.slot === parseInt(slot));
-    return `<div class="build-row"><div class="build-name">${p?.pseudo || 'Player '+slot}</div><div style="color:#22c55e">+${amount} cr</div></div>`;
-  }).join('') || `<div class="empty-msg">No contributions yet...</div>`;
+  const totalContributed = Object.values(hr.contributions).reduce((a,b) => a+b, 0);
+  const requesterContrib = hr.requester_contribution ?? 0;
+  const totalEngaged = totalContributed + requesterContrib;
+  const stillNeeded = Math.max(0, hr.cost - totalEngaged);
+  const canLaunch = isRequester && totalEngaged >= hr.cost;
+
+  const myContrib = isRequester
+    ? requesterContrib
+    : (hr.contributions[state.player_slot] || 0);
+
+  // Max que je peux encore donner = min(mes crédits, ce qui manque encore + ce que j'ai déjà mis)
+  const maxICanGive = Math.min(me?.credits ?? 0, stillNeeded + myContrib);
+
+  const pct = Math.min(100, (totalEngaged / hr.cost) * 100);
+
+  const contribRows = players.map(p => {
+    const contrib = p.slot === hr.requester_slot
+      ? (hr.requester_contribution ?? 0)
+      : (hr.contributions[p.slot] || 0);
+    const isMe = p.slot === state.player_slot;
+    return `
+      <div class="build-row">
+        <div class="build-left">
+          <div class="profile-avatar" style="width:28px;height:28px;font-size:11px;flex-shrink:0">${p.pseudo.substring(0,2).toUpperCase()}</div>
+          <div class="build-name">${p.pseudo}${isMe ? ' <span class="you-tag">You</span>' : ''}${p.slot === hr.requester_slot ? ' 🙋' : ''}</div>
+        </div>
+        <div style="font-weight:600;color:${contrib > 0 ? '#22c55e' : '#6b7280'}">${contrib > 0 ? `+${contrib} cr` : '—'}</div>
+      </div>
+    `;
+  }).join('');
 
   show(`
-    <div style="text-align:center;padding:1rem 0">
-      <h2>🤝 Asking for help</h2>
-      <p>Cost: 💰 ${hr.cost} cr · You have ${me?.credits ?? 0} cr · Collected ${totalContributed} cr</p>
-      <div class="build-list">${contribRows}</div>
+    <div style="padding:1rem 0">
+      <h2 style="text-align:center;margin-bottom:.25rem">🤝 Team Build</h2>
+      <p style="text-align:center;margin-bottom:1.5rem">${requester?.pseudo} needs help to upgrade a building</p>
+
+      <div style="text-align:center;margin-bottom:1rem">
+        <div style="font-size:28px;font-weight:800;color:${totalEngaged >= hr.cost ? '#22c55e' : '#fff'}">${totalEngaged} <span style="font-size:16px;color:#6b7280">/ ${hr.cost} cr</span></div>
+        <div style="height:8px;background:#1e2d3d;border-radius:4px;margin:.5rem 0;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${totalEngaged >= hr.cost ? '#22c55e' : '#60a5fa'};border-radius:4px;transition:width .3s"></div>
+        </div>
+        <div style="font-size:12px;color:#6b7280">${stillNeeded > 0 ? `Still needed: ${stillNeeded} cr` : '✅ Ready to launch!'}</div>
+      </div>
+
       <div class="sep"></div>
-      <button class="btn btn-primary ${!canLaunch ? 'disabled' : ''}" ${!canLaunch ? 'disabled' : ''} onclick="launchHelpUpgrade()">
-        🚀 Launch upgrade (${totalAvailable}/${hr.cost})
-      </button>
-      <button class="btn btn-secondary" onclick="cancelHelpRequest()">Cancel</button>
+
+      <h3>Contributions</h3>
+      <div class="build-list" style="margin-bottom:1rem">${contribRows}</div>
+
+      <div class="sep"></div>
+
+      <h3>Your contribution</h3>
+      <p style="color:#9ca3af;font-size:12px;margin-bottom:.5rem">
+        You have ${me?.credits ?? 0} cr · Max: ${maxICanGive} cr
+        ${maxICanGive === 0 && stillNeeded === 0 ? '· Already covered!' : ''}
+      </p>
+      <div style="display:flex;gap:8px;margin-bottom:1rem">
+        <input id="my-contrib-input" type="number" min="0" max="${maxICanGive}"
+          value="${myContrib}"
+          placeholder="0"
+          style="flex:1;padding:10px 12px;background:#0f1923;border:1px solid #2d3f50;border-radius:8px;color:#fff;font-size:15px;outline:none;margin:0" />
+        <button class="build-btn" style="padding:10px 16px" onclick="submitMyContribution()">Set</button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${canLaunch ? `
+          <button class="btn btn-primary" style="margin:0" onclick="launchHelpUpgrade()">🚀 Launch upgrade!</button>
+        ` : isRequester ? `
+          <button class="btn btn-primary disabled" disabled style="margin:0;opacity:.4">🚀 Waiting for funds (${totalEngaged}/${hr.cost} cr)</button>
+        ` : ''}
+        ${isRequester ? `
+          <button class="btn btn-secondary" style="margin:0" onclick="cancelHelpRequest()">❌ Cancel & refund all</button>
+        ` : ''}
+      </div>
     </div>
   `);
+}
+
+async function submitMyContribution() {
+  const input = document.getElementById('my-contrib-input');
+  const amount = parseInt(input?.value) || 0;
+
+  const stateRes = await fetch(`${API}/game/${state.game_id}/state`);
+  const stateData = await stateRes.json();
+  const isRequester = state.player_slot === stateData.game.help_request?.requester_slot;
+
+  const route = isRequester ? 'requester-contribute' : 'contribute';
+  const res = await fetch(`${API}/game/${state.game_id}/help/${route}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ player_slot: state.player_slot, amount }),
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error);
+  socket.emit('game_update', { game_id: state.game_id });
 }
 
 async function launchHelpUpgrade() {
@@ -1112,48 +1184,6 @@ async function launchHelpUpgrade() {
 async function cancelHelpRequest() {
   await fetch(`${API}/game/${state.game_id}/help/cancel`, { method: 'POST' });
   stopPolling();
-  socket.emit('game_update', { game_id: state.game_id });
-  loadGame();
-}
-function renderHelpContributorView(hr, players) {
-  stopPolling();
-  const requester = players.find(p => p.slot === hr.requester_slot);
-  const me = players.find(p => p.slot === state.player_slot);
-  const myContribution = hr.contributions[state.player_slot] || 0;
-  const totalContributed = Object.values(hr.contributions).reduce((a,b) => a+b, 0);
-
-  show(`
-    <div style="text-align:center;padding:1rem 0">
-      <h2>🤝 ${requester?.pseudo} needs help!</h2>
-      <p>Upgrade costs 💰 ${hr.cost} cr · Collected so far: ${totalContributed} cr</p>
-      <p style="color:#9ca3af">You have ${me?.credits ?? 0} cr · You gave ${myContribution} cr</p>
-      <input id="contrib-amount" type="number" min="1" max="${me?.credits ?? 0}" placeholder="Amount to give" style="text-align:center" />
-      <button class="btn btn-primary" onclick="contributeToHelp()">💰 Contribute</button>
-      <button class="btn btn-secondary" onclick="loadGame()">Wait / Refresh</button>
-    </div>
-  `);
-
-  pollingInterval = setInterval(async () => {
-    const res = await fetch(`${API}/game/${state.game_id}/state`);
-    const data = await res.json();
-    if (!data.game.help_request) {
-      stopPolling();
-      loadGame();
-    }
-  }, 1500);
-}
-
-async function contributeToHelp() {
-  const amount = parseInt(document.getElementById('contrib-amount').value);
-  if (!amount || amount <= 0) return alert('Enter a valid amount');
-
-  const res = await fetch(`${API}/game/${state.game_id}/help/contribute`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ player_slot: state.player_slot, amount }),
-  });
-  const data = await res.json();
-  if (!res.ok) return alert(data.error);
   socket.emit('game_update', { game_id: state.game_id });
   loadGame();
 }
