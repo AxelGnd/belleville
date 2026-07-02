@@ -10,21 +10,50 @@ let state = {
 
 let pollingInterval = null;
 
+// NOUVEAU — tableau ROLES avec lore + objectif séparés
 const ROLES = [
-  { id:'scientist',    icon:'🔬', name:'The Scientist',        desc:'Upgrade the Research Center and the Hospital to Level 2.' },
-  { id:'ecologist',    icon:'🌿', name:'The Ecologist',         desc:'4 Green Energy installations + Pollution Gauge below 3.' },
-  { id:'industrialist',icon:'🏭', name:'The Industrialist',     desc:'Upgrade the Fossil Plant to Level 2 + Pollution Gauge above 15.' },
-  { id:'mayor',        icon:'🏛', name:'The Mayor',             desc:'Hospital, School and Research Center all at least Level 1.' },
-  { id:'urbanist',     icon:'📐', name:'The Urbanist',          desc:'Build at least 3 Residential Buildings + School at Level 2.' },
-  { id:'head_doctor',  icon:'🏥', name:'The Head Doctor',       desc:'Hospital at Level 2 + Pollution Gauge below 5.' },
-  { id:'engineer',     icon:'⚙️', name:'The Engineer',          desc:'4 Green Energy installations + Fossil Plant dismantled.' },
-  { id:'banker',       icon:'💰', name:'The Banker',            desc:'Own 1 Level 2 Residential Building + hold 12 Credits.' },
-  { id:'activist',     icon:'✊', name:'The Activist',          desc:'Fossil Plant stays at Level 1 + Pollution Gauge reaches 0.' },
-  { id:'developer',    icon:'🏘', name:'The Property Developer',desc:'Own two Level 2 Residential Buildings.' },
-  { id:'technocrat',   icon:'💡', name:'The Technocrat',        desc:'Research Center Level 2 + 3 Green Energy + Fossil Plant at Level 1.' },
-  { id:'lobbyist',     icon:'🤝', name:'The Fossil Lobbyist',   desc:'Fossil Plant Level 2 + 2 Residential Buildings + Pollution between 10 and 15.' },
-  { id:'union_leader', icon:'👷', name:'The Union Leader',      desc:'Hospital and Fossil Power Plant both at Level 2.' },
-  { id:'visionary',    icon:'🔭', name:'The Visionary',         desc:'Research Center Level 2 + own 1 Level 2 Residential + at least 1 Solar Panel or Wind Turbine.' },
+  { id:'scientist', icon:'🔬', name:'The Scientist',
+    lore:'As the head scientist of Belleville, you want to discover the next medical breakthrough. Major innovations often emerge when research and healthcare progress together.',
+    desc:'Upgrade the Research Center to Level 2 and the Hospital to Level 2.' },
+  { id:'ecologist', icon:'🌿', name:'The Ecologist',
+    lore:'Ecology is at the heart of your vision for Belleville. Invest in renewable energy and reduce pollution before it is too late.',
+    desc:'You win if the city has 4 Green Energy installations and the Pollution Gauge is below 5.' },
+  { id:'industrialist', icon:'🏭', name:'The Industrialist',
+    lore:'Industry keeps Belleville running, and economic growth comes first. Fossil fuels remain one of the most reliable energy sources, but they also generate significant pollution.',
+    desc:'Upgrade the plant to Level 2 and push the Pollution Gauge above 15 to win.' },
+  { id:'mayor', icon:'🏛', name:'The Mayor',
+    lore:"As Mayor, your duty is to guarantee the well being of Belleville's citizens. Good schools, hospitals and public services are among the strongest indicators of a city's quality of life.",
+    desc:'Make sure the Hospital, School and Research Center are all upgraded to at least Level 1 and at least 2 Residential Units are built.' },
+  { id:'urbanist', icon:'📐', name:'The Urbanist',
+    lore:'People need a place to live. Your research in urban planning shows that access to schools is a key factor in neighborhood development.',
+    desc:'Build at least 3 Residential Buildings and upgrade the School to Level 2.' },
+  { id:'head_doctor', icon:'🏥', name:'The Head Doctor',
+    lore:"The health of Belleville's citizens depends on both medical care and air quality. Air pollution is linked to respiratory diseases and can shorten life expectancy.",
+    desc:'Upgrade the Hospital to Level 2 and keep the Pollution Gauge below 3.' },
+  { id:'engineer', icon:'⚙️', name:'The Engineer',
+    lore:'As an engineer, you know renewable energy is the future and play a major role in reducing emissions.',
+    desc:'Develop 2 different Green Energy installations (1 Solar Panel and 1 Wind Turbine) to Level 2 and help the city dismantle the Fossil Power Plant through a Grand Project.' },
+  { id:'banker', icon:'💰', name:'The Banker',
+    lore:'The city needs your money to fund its ambitious projects. Whether this money is earned sustainably or not is up to you.',
+    desc:'You win if you own at least one Level 2 Residential Building, fund 2 public infrastructure and hold 12 Credits at the end of a round.' },
+  { id:'activist', icon:'✊', name:'The Activist',
+    lore:"The Fossil Power Plant is a threat to Belleville's future. Prevent it from being upgraded and push the city toward a pollution-free future.",
+    desc:'You win if you launch 2 clean-up campaigns, the Power Plant remains at Level 1 and the Pollution Gauge reaches 0.' },
+  { id:'developer', icon:'🏘', name:'The Property Developer',
+    lore:'Belleville is growing rapidly, and new housing means new opportunities. Modern building renovations can significantly reduce energy consumption through better insulation and design.',
+    desc:'Invest in residential development: own two Level 2 Residential Buildings to win and make sure the Pollution Gauge stays below 10.' },
+  { id:'technocrat', icon:'💡', name:'The Technocrat',
+    lore:'Innovations are the keys to a progressive city. Develop advanced research while maintaining a balanced energy transition.',
+    desc:'You win if the Research Center reaches Level 2 and the city has 3 Green Energy installations.' },
+  { id:'lobbyist', icon:'🤝', name:'The Fossil Lobbyist',
+    lore:'Fossil power plants provide stable electricity even when wind and solar production fluctuate. You believe Belleville cannot afford to abandon traditional energy sources yet.',
+    desc:'Upgrade the Fossil Power Plant to Level 2 and make sure the city has two Residential Buildings, and a Pollution level between 10 and 15.' },
+  { id:'union_leader', icon:'👷', name:'The Union Leader',
+    lore:'You represent the workers of Belleville. Protect employment and make sure healthcare remains a priority.',
+    desc:'You win if the school gets built and if both the Hospital and the Fossil Power Plant reach Level 2.' },
+  { id:'visionary', icon:'🔭', name:'The Visionary',
+    lore:"Many of today's most successful cities invest simultaneously in research, housing and clean energy. You want Belleville to be built on the same model.",
+    desc:'You win if the Research Center reaches Level 2, you own one Level 2 Residential Building, and the city has at least one Solar Panel and one Wind Turbine.' },
 ];
 
 const BUILDING_ICONS = {
@@ -219,31 +248,44 @@ function showWheelAnimation(availableRoles, takenRoles) {
     wheel.style.transform  = `rotate(${finalAngle}deg)`;
   }, 100);
 
-  setTimeout(() => {
-    show(`
-      <div style="text-align:center;padding:3rem 1rem;animation:fadeIn .6s ease">
-        <div style="font-size:72px;margin-bottom:1.5rem">${chosenRole.icon}</div>
-        <div style="font-size:28px;font-weight:800;letter-spacing:-1px;margin-bottom:1rem">${chosenRole.name}</div>
-        <div style="
-          font-size:15px;
-          color:#9ca3af;
-          line-height:1.7;
-          max-width:300px;
-          margin:0 auto 2rem;
-        ">${chosenRole.desc}</div>
-        <div style="
-          background:#1e2d3d;
-          border:1px solid #22c55e44;
-          border-radius:10px;
-          padding:12px;
-          font-size:12px;
-          color:#6b7280;
-          margin-bottom:2rem;
-        ">🤫 Keep your role secret from other players!</div>
-        <button class="btn btn-primary" onclick="joinWithRole('${chosenRole.id}')">Enter the city →</button>
-      </div>
-    `);
-  }, 4500);
+  // NOUVEAU
+setTimeout(() => {
+  show(`
+    <div style="text-align:center;padding:3rem 1rem;animation:fadeIn .6s ease">
+      <div style="font-size:72px;margin-bottom:1.5rem">${chosenRole.icon}</div>
+      <div style="font-size:28px;font-weight:800;letter-spacing:-1px;margin-bottom:1rem">${chosenRole.name}</div>
+      <div style="
+        font-size:14px;
+        color:#d1d5db;
+        line-height:1.7;
+        max-width:320px;
+        margin:0 auto 1rem;
+        font-style:italic;
+      ">${chosenRole.lore}</div>
+      <div style="
+        background:#22c55e11;
+        border:1px solid #22c55e44;
+        border-radius:10px;
+        padding:12px;
+        font-size:13px;
+        color:#22c55e;
+        max-width:320px;
+        margin:0 auto 2rem;
+        text-align:left;
+      "><strong>🎯 Objective:</strong> ${chosenRole.desc}</div>
+      <div style="
+        background:#1e2d3d;
+        border:1px solid #22c55e44;
+        border-radius:10px;
+        padding:12px;
+        font-size:12px;
+        color:#6b7280;
+        margin-bottom:2rem;
+      ">🤫 Keep your role secret from other players!</div>
+      <button class="btn btn-primary" onclick="joinWithRole('${chosenRole.id}')">Enter the city →</button>
+    </div>
+  `);
+}, 4500);
 }
 
 async function joinWithRole(roleId) {
