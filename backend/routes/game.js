@@ -528,6 +528,45 @@ router.post('/:game_id/help/contribute', async (req, res) => {
   }
 });
 
+// ── HELP REQUEST: requester contributes credits ────────────────
+router.post('/:game_id/help/requester-contribute', async (req, res) => {
+  try {
+    const { player_slot, amount } = req.body;
+    const id = req.params.game_id;
+
+    if (!amount || amount <= 0) return res.status(400).json({ error: 'Invalid amount' });
+
+    const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
+    if (!game.help_request) return res.status(400).json({ error: 'No active help request' });
+
+    const hr = game.help_request;
+    if (hr.status !== 'open') return res.status(400).json({ error: 'Request is closed' });
+    if (player_slot !== hr.requester_slot) return res.status(400).json({ error: 'Only the requester can use this route' });
+
+    const player = (await db.query("SELECT * FROM players WHERE game_id=$1 AND slot=$2", [id, player_slot])).rows[0];
+    if (player.credits < amount) return res.status(400).json({ error: 'Not enough credits' });
+
+    // Calcule combien il manque encore
+    const totalContributed = Object.values(hr.contributions).reduce((a,b) => a+b, 0);
+    const requesterContrib = hr.requester_contribution ?? 0;
+    const alreadyCovered = requesterContrib + totalContributed;
+    const stillNeeded = Math.max(0, hr.cost - alreadyCovered);
+
+    if (stillNeeded === 0) return res.status(400).json({ error: 'Already enough credits collected' });
+    if (amount > stillNeeded) return res.status(400).json({ error: `Too much! Only ${stillNeeded} cr still needed` });
+
+    await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3", [amount, id, player_slot]);
+    hr.requester_contribution = requesterContrib + amount;
+    await db.query("UPDATE games SET help_request=$1 WHERE id=$2", [JSON.stringify(hr), id]);
+    await addLog(id, game.turn, `💰 Player ${player_slot} (requester) contributes ${amount} cr`);
+
+    res.json({ success: true, help_request: hr });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ── HELP REQUEST: launch upgrade (requester confirms) ──────────
 router.post('/:game_id/help/launch', async (req, res) => {
   try {
@@ -548,8 +587,9 @@ if (totalAvailable < hr.cost) {
   return res.status(400).json({ error: `Not enough total credits (have ${totalAvailable}, need ${hr.cost})` });
 }
 
-await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3",
-  [requesterContrib, id, player_slot]);
+    // Note : requesterContrib a déjà été déduit des crédits du joueur au moment
+    // de sa contribution (route /help/requester-contribute). On ne le déduit
+    // pas une seconde fois ici.
 
     // Améliore le bâtiment
     const building = (await db.query("SELECT * FROM buildings WHERE id=$1 AND game_id=$2", [hr.building_id, id])).rows[0];

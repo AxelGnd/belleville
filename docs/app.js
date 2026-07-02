@@ -1066,6 +1066,13 @@ function showHelpRequesterView() {
 function renderHelpView(hr, players) {
   if (!hr) { stopPolling(); loadGame(); return; }
 
+  // Ne pas re-rendre (et donc écraser le champ) pendant que le joueur tape
+  const activeInput = document.getElementById('my-contrib-input');
+  if (activeInput && document.activeElement === activeInput) return;
+
+  // On garde une référence pour submitMyContribution() (évite un fetch + une race condition)
+  state.currentHelpRequest = hr;
+
   const me = players.find(p => p.slot === state.player_slot);
   const isRequester = state.player_slot === hr.requester_slot;
   const requester = players.find(p => p.slot === hr.requester_slot);
@@ -1082,8 +1089,8 @@ function renderHelpView(hr, players) {
     ? requesterContrib
     : (hr.contributions[state.player_slot] || 0);
 
-  // Max que je peux encore donner
-  const maxICanGive = Math.min(me?.credits ?? 0, stillNeeded + myContrib);
+  // Max que je peux encore ajouter maintenant (delta, pas total)
+  const maxICanAdd = Math.min(me?.credits ?? 0, stillNeeded);
 
   // Barre de progression
   const pct = Math.min(100, (totalEngaged / hr.cost) * 100);
@@ -1126,13 +1133,20 @@ function renderHelpView(hr, players) {
       <div class="sep"></div>
 
       <h3>Your contribution</h3>
-      <p style="color:#9ca3af;font-size:12px;margin-bottom:.5rem">You have ${me?.credits ?? 0} cr · Max you can give: ${maxICanGive} cr</p>
+      <p style="color:#9ca3af;font-size:12px;margin-bottom:.5rem">
+        You already gave ${myContrib} cr · You have ${me?.credits ?? 0} cr · Max you can add now: ${maxICanAdd} cr
+      </p>
+      <div style="display:flex;gap:8px;margin-bottom:.5rem">
+        ${[1,2,5].filter(v => v <= maxICanAdd).map(v => `
+          <button class="build-btn" style="flex:1;padding:8px" onclick="quickContribute(${v})">+${v} cr</button>
+        `).join('')}
+      </div>
       <div style="display:flex;gap:8px;margin-bottom:1rem">
-        <input id="my-contrib-input" type="number" min="0" max="${maxICanGive}"
-          value="${myContrib}"
-          placeholder="0"
+        <input id="my-contrib-input" type="number" min="0" max="${maxICanAdd}"
+          value=""
+          placeholder="Amount to add"
           style="flex:1;padding:10px 12px;background:#0f1923;border:1px solid #2d3f50;border-radius:8px;color:#fff;font-size:15px;outline:none" />
-        <button class="build-btn" style="padding:10px 16px" onclick="submitMyContribution()">Set</button>
+        <button class="build-btn" style="padding:10px 16px" onclick="submitMyContribution()">Add</button>
       </div>
 
       <div style="display:flex;flex-direction:column;gap:8px">
@@ -1152,9 +1166,19 @@ function renderHelpView(hr, players) {
 async function submitMyContribution() {
   const input = document.getElementById('my-contrib-input');
   const amount = parseInt(input?.value) || 0;
-  const isRequester = state.player_slot === (await fetch(`${API}/game/${state.game_id}/state`).then(r=>r.json()).then(d=>d.game.help_request?.requester_slot));
+  if (amount <= 0) return alert('Enter an amount greater than 0');
+  await sendContribution(amount);
+}
 
+async function quickContribute(amount) {
+  await sendContribution(amount);
+}
+
+async function sendContribution(amount) {
+  const hr = state.currentHelpRequest;
+  const isRequester = hr && state.player_slot === hr.requester_slot;
   const route = isRequester ? 'requester-contribute' : 'contribute';
+
   const res = await fetch(`${API}/game/${state.game_id}/help/${route}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1162,6 +1186,9 @@ async function submitMyContribution() {
   });
   const data = await res.json();
   if (!res.ok) return alert(data.error);
+  state.currentHelpRequest = data.help_request;
+  const players = await fetch(`${API}/game/${state.game_id}/state`).then(r => r.json()).then(d => d.players);
+  renderHelpView(data.help_request, players);
   socket.emit('game_update', { game_id: state.game_id });
 }
 
