@@ -541,18 +541,15 @@ router.post('/:game_id/help/launch', async (req, res) => {
     if (player_slot !== hr.requester_slot) return res.status(400).json({ error: 'Only the requester can launch' });
 
     const totalContributed   = Object.values(hr.contributions).reduce((a,b) => a+b, 0);
-    const requesterContrib   = hr.requester_contribution ?? 0;
-    const totalAvailable     = requesterContrib + totalContributed;
+    const requesterContrib = hr.requester_contribution ?? 0;
+const totalAvailable   = requesterContrib + totalContributed;
 
-    if (totalAvailable < hr.cost) {
-      return res.status(400).json({ error: `Not enough total credits (have ${totalAvailable}, need ${hr.cost})` });
-    }
+if (totalAvailable < hr.cost) {
+  return res.status(400).json({ error: `Not enough total credits (have ${totalAvailable}, need ${hr.cost})` });
+}
 
-    // Déduit la contribution du demandeur
-    await db.query(
-      "UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3",
-      [requesterContrib, id, player_slot]
-    );
+await db.query("UPDATE players SET credits=credits-$1 WHERE game_id=$2 AND slot=$3",
+  [requesterContrib, id, player_slot]);
 
     // Améliore le bâtiment
     const building = (await db.query("SELECT * FROM buildings WHERE id=$1 AND game_id=$2", [hr.building_id, id])).rows[0];

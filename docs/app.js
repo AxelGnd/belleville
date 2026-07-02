@@ -929,17 +929,16 @@ function getEffectDescription(event) {
 async function endTurn() {
   const res  = await fetch(`${API}/game/${state.game_id}/end-turn`, { method: 'POST' });
   const data = await res.json();
-  if (!res.ok) {
-    alert(data.error);
-    return;
-  }
+  if (!res.ok) { alert(data.error); return; }
 
   if (data.lost) {
+    socket.emit('game_end', { game_id: state.game_id, won: false, winners: [] });
     showEndScreen(false, []);
     return;
   }
 
   if (data.winners && data.winners.length > 0) {
+    socket.emit('game_end', { game_id: state.game_id, won: true, winners: data.winners });
     showEndScreen(true, data.winners);
     return;
   }
@@ -952,6 +951,10 @@ async function endTurn() {
   loadGame();
 }
 
+socket.on('game_ended', ({ won, winners }) => {
+  stopPolling();
+  showEndScreen(won, winners);
+});
 // ── Écran de fin ─────────────────────────────────────────────
 function showEndScreen(won, winners) {
   stopPolling(); // ← arrête tout polling
@@ -1010,7 +1013,8 @@ socket.on('state_update', async () => {
   if (!state.game_id) return;
   const res  = await fetch(`${API}/game/${state.game_id}/state`);
   const data = await res.json();
-  if (data.game?.status === 'won' || data.game?.status === 'lost') return; // ne pas recharger
+  if (data.game?.status === 'won') { stopPolling(); showEndScreen(true, data.game.winners_cache || []); return; }
+  if (data.game?.status === 'lost') { stopPolling(); showEndScreen(false, []); return; }
   renderGame(data);
 });
 async function blackoutDowngrade(building_id) {

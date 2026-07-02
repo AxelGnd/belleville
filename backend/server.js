@@ -35,6 +35,9 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log('Client déconnecté :', socket.id);
   });
+  socket.on('game_end', (data) => {
+  io.to(`game_${data.game_id}`).emit('game_ended', data);
+});
 });
 
 const PORT = process.env.PORT || 3000;
