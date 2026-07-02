@@ -249,7 +249,7 @@ function showWheelAnimation(availableRoles, takenRoles) {
   }, 100);
 
   // NOUVEAU
-setTimeout(() => {
+  setTimeout(() => {
   show(`
     <div style="text-align:center;padding:3rem 1rem;animation:fadeIn .6s ease">
       <div style="font-size:72px;margin-bottom:1.5rem">${chosenRole.icon}</div>
@@ -284,8 +284,8 @@ setTimeout(() => {
       ">🤫 Keep your role secret from other players!</div>
       <button class="btn btn-primary" onclick="joinWithRole('${chosenRole.id}')">Enter the city →</button>
     </div>
-  `);
-}, 4500);
+    `);
+  }, 4500);
 }
 
 async function joinWithRole(roleId) {
