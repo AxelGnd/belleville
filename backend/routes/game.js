@@ -2,23 +2,21 @@ const express = require('express');
 const router  = express.Router();
 const db      = require('../db/connection');
 
+// NOUVEAU
 const EVENTS = [
-  // Crises
-  { id: 1,  type:'crisis',      title:'Cold Wave',                desc:'All buildings consume +1 Energy this round.',                          effect:'demand_plus1_all' },
-  { id: 2,  type:'crisis',      title:'Heat Wave',                desc:'All buildings consume +1 Energy this round.',                          effect:'demand_plus1_all' },
-  { id: 3,  type:'crisis',      title:'Toxic Leak',               desc:'Hospital Lv2: nothing. Hospital Lv1/0: +2 Pollution.',                 effect:'toxic_leak' },
-  { id: 4,  type:'crisis',      title:'Material Shortage',        desc:'All building upgrades cost +1 Credit this round.',                     effect:'upgrade_cost_plus1' },
-  { id: 5,  type:'crisis',      title:'Overcast Skies & No Wind', desc:'Green Energy installations produce 0 Energy this round.',              effect:'green_zero' },
-  { id: 6,  type:'crisis',      title:'Respiratory Crisis',       desc:'Hospital Lv2: nothing. Lv1: -1 cr each. Lv0: -2 cr each.',            effect:'respiratory_crisis' },
-  { id: 7,  type:'crisis',      title:'Severe Drought',           desc:'Parks lose their effect this round.',                                  effect:'park_zero' },
-  // Opportunités
-  { id: 8,  type:'opportunity', title:'European Grants',          desc:'Each player gains 2 Credits.',                                         effect:'all_gain2cr' },
-  { id: 9,  type:'opportunity', title:'Technological Breakthrough',desc:'Level 2 upgrades cost 2 fewer Credits this round.',                   effect:'upgrade_cost_minus2' },
-  { id: 10, type:'opportunity', title:'Earth Day',                desc:'The next Pollution Cleanup action is free.',                           effect:'free_depollute' },
-  { id: 11, type:'opportunity', title:'New Bike Lanes',           desc:'Reduce Pollution by 1 immediately.',                                   effect:'pollution_minus1' },
-  // Neutres
-  { id: 12, type:'neutral',     title:'Municipal Elections',      desc:'If no Grand Project is funded this round: +1 Pollution.',              effect:'elections' },
-  { id: 13, type:'neutral',     title:'Environmental Audit',      desc:'Fossil Lv2: +2 Poll. Fossil Lv1: +1 Poll. Dismantled: -1 Poll.',      effect:'audit' },
+{ id: 1, type:'crisis', title:'Cold Wave', info:"Winters below -10°C can raise a city's heating demand by over 30%.", desc:'All buildings consume +1 Energy this round.', effect:'demand_plus1_all' },
+{ id: 2, type:'crisis', title:'Heat Wave', info:'Heatwaves above 35°C can push air conditioning demand up by 40%.', desc:'All buildings consume +1 Energy this round.', effect:'demand_plus1_all' },
+{ id: 3, type:'crisis', title:'Toxic Leak', info:'Industrial leaks can contaminate water supplies for over 100,000 people in days.', desc:'Hospital Lv2: nothing. Hospital Lv1/0: +2 Pollution.', effect:'toxic_leak' },
+{ id: 4, type:'crisis', title:'Material Shortage', info:'Global supply shortages can raise construction material costs by 20-50%.', desc:'All building upgrades cost +1 Credit this round.', effect:'upgrade_cost_plus1' },
+{ id: 5, type:'crisis', title:'Overcast Skies & No Wind', info:'Solar and wind output can drop by up to 80% during still, cloudy weather.', desc:'Green Energy installations produce 0 Energy this round.', effect:'green_zero' },
+{ id: 6, type:'crisis', title:'Respiratory Crisis', info:'Air pollution causes an estimated 7 million premature deaths worldwide each year.', desc:'Hospital Lv2: nothing. Lv1: -1 cr each. Lv0: -2 cr each.', effect:'respiratory_crisis' },
+{ id: 7, type:'crisis', title:'Severe Drought', info:'Droughts can reduce urban green space survival rates by more than 50%.', desc:'Parks lose their effect this round.', effect:'park_zero' },
+{ id: 8, type:'opportunity', title:'European Grants', info:'The EU has invested over 1 trillion euros in green transition funds since 2020.', desc:'Each player gains 2 Credits.', effect:'all_gain2cr' },
+{ id: 9, type:'opportunity', title:'Technological Breakthrough', info:'R&D investment cuts renewable technology costs by roughly 10% per year.', desc:'Level 2 upgrades cost 2 fewer Credits this round.', effect:'upgrade_cost_minus2' },
+{ id: 10, type:'opportunity', title:'Earth Day', info:'Earth Day mobilizes over 1 billion people globally each year for environmental action.', desc:'The next Pollution Cleanup action is free.', effect:'free_depollute' },
+{ id: 11, type:'opportunity', title:'New Bike Lanes', info:'Cities with more bike lanes see up to 15% lower local air pollution.', desc:'Reduce Pollution by 1 immediately.', effect:'pollution_minus1' },
+{ id: 12, type:'neutral', title:'Municipal Elections', info:'Voter turnout in local elections influences up to 60% of urban policy decisions.', desc:'If no Grand Project is funded this round: +1 Pollution.', effect:'elections' },
+{ id: 13, type:'neutral', title:'Environmental Audit', info:'Environmental audits can cut a city\'s industrial emissions by 10-25%.', desc:'Fossil Lv2: +2 Poll. Fossil Lv1: +1 Poll. Dismantled: -1 Poll.', effect:'audit' },
 ];
 const COSTS = {
   hopital:            [5, 8],

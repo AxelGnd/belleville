@@ -936,7 +936,7 @@ function showEventPopup(event) {
         #${event.id} · ${event.type}
       </div>
       <div style="font-size:20px;font-weight:800;margin-bottom:12px">${event.title}</div>
-      <div style="font-size:13px;color:#9ca3af;line-height:1.7;margin-bottom:1.5rem">${event.desc}</div>
+      <div style="font-size:13px;color:#9ca3af;line-height:1.7;margin-bottom:1.5rem">${event.info}</div>
       <div style="background:${typeBg}33;border:1px solid ${typeColor}44;border-radius:10px;padding:12px;margin-bottom:1.5rem">
         <div style="font-size:11px;color:${typeColor};text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Effect on the game</div>
         <div style="font-size:13px;color:#d1d5db">${getEffectDescription(event)}</div>
