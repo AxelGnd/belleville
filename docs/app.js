@@ -9,7 +9,7 @@ let state = {
 };
 
 let pollingInterval = null;
-
+let gameHasEnded = false;
 // NOUVEAU — tableau ROLES avec lore + objectif séparés
 const ROLES = [
   { id:'scientist', icon:'🔬', name:'The Scientist',
@@ -397,9 +397,22 @@ async function startGame() {
   loadGame();
 }
 
+// NOUVEAU
 async function loadGame() {
   const res  = await fetch(`${API}/game/${state.game_id}/state`);
   const data = await res.json();
+
+  if (data.game?.status === 'won') {
+    stopPolling();
+    showEndScreen(true, data.game.winners_cache || data.winners || [], data.game.pollution);
+    return;
+  }
+  if (data.game?.status === 'lost') {
+    stopPolling();
+    showEndScreen(false, [], data.game.pollution);
+    return;
+  }
+
   renderGame(data);
 }
 
@@ -414,6 +427,7 @@ function phaseLabel(phase) {
 }
 
 function renderGame(data) {
+  if (gameHasEnded) return;
   const { game, players, buildings, logs } = data;
 
   // Récupère le rôle depuis state ou depuis le serveur
@@ -918,7 +932,7 @@ function showDepolluteInitiatorWaitView() {
 async function drawEvent() {
   const num = document.getElementById('event-number')?.value;
   const res = await fetch(`${API}/game/${state.game_id}/draw-event`, {
-    method: 'POST',
+    method: 'POST', 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ event_number: num || null }),
   });
@@ -1021,7 +1035,7 @@ function getPollutionDebrief(pollution) {
 
 function showEndScreen(won, winners, pollution = 0) {
   stopPolling(); // ← arrête tout polling
-
+  gameHasEnded = true;
   if (won) {
     const debrief = getPollutionDebrief(pollution);
     // NOUVEAU
@@ -1065,6 +1079,7 @@ const winnerCards = (winners || []).map(w => {
 }
 
 async function newGame() {
+  gameHasEnded = false;
   // Réinitialise le state local
   state.game_id     = null;
   state.player_slot = null;
