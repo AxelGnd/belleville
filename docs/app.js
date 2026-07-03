@@ -728,43 +728,41 @@ function showBuildMenu() {
       const canDismantle = centrale.level >= 1;
 
       if (!canUpgrade && !canDismantle) {
-        return `
-          <div class="build-row max">
-            <div class="build-left">
-              <span class="build-icon">⚛️</span>
-              <div class="build-info">
-                <div class="build-name">Nuclear Power Plant</div>
-                <div class="build-status" style="color:#6b7280">Dismantled</div>
-              </div>
-            </div>
-          </div>`;
-      }
-
-      return `
-        <div class="build-row">
-          <div class="build-left">
-            <span class="build-icon">⚛️</span>
-            <div class="build-info">
-              <div class="build-name">Nuclear Power Plant (Lv${centrale.level})</div>
-            </div>
-          </div>
-          <div style="display:flex;gap:8px">
-            ${canUpgrade ? `
-              <div style="text-align:center">
-                <div class="build-cost">💰 4 cr</div>
-                <button class="build-btn ${me?.credits < 4 ? 'disabled':''}" ${me?.credits < 4 ? 'disabled':''}
-                  onclick="doAction('upgrade',${centrale.id});closeModal()">Lv 1→2</button>
-              </div>` : ''}
-            ${canDismantle ? `
-  <button class="build-btn" style="background:#ef4444" onclick="dismantlePlant(${centrale.id});closeModal()">
-    ☢️ Dismantle (16 cr)
-  </button>
-` : ''}
-          </div>
-        </div>
-      `;
+        // NOUVEAU
+return `
+  <div class="build-row">
+    <div class="build-left">
+      <span class="build-icon">⚛️</span>
+      <div class="build-info">
+        <div class="build-name">Nuclear Power Plant (Lv${centrale.level})</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      ${canUpgrade ? `
+        <div style="text-align:center">
+          <div class="build-cost">💰 4 cr</div>
+          ${me?.credits >= 4 ? `
+            <button class="build-btn" onclick="doAction('upgrade',${centrale.id});closeModal()">Lv 1→2</button>
+          ` : `
+            <button class="build-btn disabled" disabled>Lv 1→2</button>
+            <button class="build-btn" style="background:#60a5fa;margin-top:4px" onclick="requestHelp(${centrale.id},'upgrade');closeModal()">🤝 Ask for help</button>
+          `}
+        </div>` : ''}
+      ${canDismantle ? `
+        <div style="text-align:center">
+          <div class="build-cost">💰 16 cr</div>
+          ${me?.credits >= 16 ? `
+            <button class="build-btn" style="background:#ef4444" onclick="dismantlePlant(${centrale.id});closeModal()">☢️ Dismantle</button>
+          ` : `
+            <button class="build-btn disabled" disabled>☢️ Dismantle</button>
+            <button class="build-btn" style="background:#60a5fa;margin-top:4px" onclick="requestHelp(${centrale.id},'dismantle');closeModal()">🤝 Ask for help</button>
+          `}
+        </div>` : ''}
+    </div>
+  </div>
+`;
     }
-
+  }
     const hasLv0 = list.find(b => b.level === 0);
     const hasLv1 = list.find(b => b.level === 1);
 
@@ -936,6 +934,7 @@ function showEventPopup(event) {
         #${event.id} · ${event.type}
       </div>
       <div style="font-size:20px;font-weight:800;margin-bottom:12px">${event.title}</div>
+      <div style="font-size:13px;color:#d1d5db;line-height:1.7;margin-bottom:.75rem;font-style:italic">${event.story}</div>
       <div style="font-size:13px;color:#9ca3af;line-height:1.7;margin-bottom:1.5rem">${event.info}</div>
       <div style="background:${typeBg}33;border:1px solid ${typeColor}44;border-radius:10px;padding:12px;margin-bottom:1.5rem">
         <div style="font-size:11px;color:${typeColor};text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Effect on the game</div>
@@ -979,11 +978,12 @@ async function endTurn() {
     return;
   }
 
-  if (data.winners && data.winners.length > 0) {
-    socket.emit('game_end', { game_id: state.game_id, won: true, winners: data.winners });
-    showEndScreen(true, data.winners);
+  // NOUVEAU
+if (data.winners && data.winners.length > 0) {
+    socket.emit('game_end', { game_id: state.game_id, won: true, winners: data.winners, pollution: data.new_pollution });
+    showEndScreen(true, data.winners, data.new_pollution);
     return;
-  }
+}
 
   let msg = `📊 Report — Demand: ${data.demand} | Green: ${data.green} | Fossil: ${data.effective_fossil} | +${data.pollution_add} pollution`;
   if (data.blackout) msg += `\n⚡ BLACKOUT! Overload of ${data.blackout_excess}`;
@@ -993,15 +993,25 @@ async function endTurn() {
   loadGame();
 }
 
-socket.on('game_ended', ({ won, winners }) => {
+// NOUVEAU
+socket.on('game_ended', ({ won, winners, pollution }) => {
   stopPolling();
-  showEndScreen(won, winners);
+  showEndScreen(won, winners, pollution ?? 0);
 });
 // ── Écran de fin ─────────────────────────────────────────────
-function showEndScreen(won, winners) {
+// NOUVEAU
+function getPollutionDebrief(pollution) {
+  if (pollution <= 5) return "🌿 Excellent result: Belleville kept its air remarkably clean while achieving victory.";
+  if (pollution <= 10) return "🙂 Good balance: the city grew while keeping pollution under control.";
+  if (pollution <= 15) return "⚠️ Mixed result: the objective was reached, but pollution remains a real concern for Belleville.";
+  return "🚨 Fragile victory: the objective was reached, but Belleville is on the verge of an environmental crisis.";
+}
+
+function showEndScreen(won, winners, pollution = 0) {
   stopPolling(); // ← arrête tout polling
 
   if (won) {
+    const debrief = getPollutionDebrief(pollution);
     const winnerCards = winners.map(w => {
       const role = ROLES.find(r => r.id === w.role);
       return `
@@ -1021,12 +1031,17 @@ function showEndScreen(won, winners) {
       `;
     }).join('');
 
+    // NOUVEAU
     show(`
       <div style="text-align:center;padding:2rem 0">
         <div style="font-size:64px;margin-bottom:1rem">🏆</div>
         <h1 style="color:#22c55e;margin-bottom:0.5rem">Victory!</h1>
         <p style="margin-bottom:2rem">A player has completed their secret objective!</p>
         ${winnerCards}
+        <div style="background:#1e2d3d;border:1px solid #2d3f50;border-radius:10px;padding:14px;margin:1.5rem 0;font-size:13px;color:#d1d5db">
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">City debrief · Pollution: ${pollution}/20</div>
+          ${debrief}
+        </div>
         <button class="btn btn-primary" style="margin-top:1rem" onclick="newGame()">🌿 New game</button>
       </div>
     `);
@@ -1055,7 +1070,8 @@ socket.on('state_update', async () => {
   if (!state.game_id) return;
   const res  = await fetch(`${API}/game/${state.game_id}/state`);
   const data = await res.json();
-  if (data.game?.status === 'won') { stopPolling(); showEndScreen(true, data.game.winners_cache || []); return; }
+  // NOUVEAU
+  if (data.game?.status === 'won') { stopPolling(); showEndScreen(true, data.game.winners_cache || [], data.game.pollution); return; }
   if (data.game?.status === 'lost') { stopPolling(); showEndScreen(false, []); return; }
   renderGame(data);
 });
@@ -1068,10 +1084,11 @@ async function blackoutDowngrade(building_id) {
   const data = await res.json();
   if (!res.ok) return alert(data.error);
 
-  if (data.resolved && data.winners?.length > 0) {
-    showEndScreen(true, data.winners);
+  // NOUVEAU
+if (data.resolved && data.winners?.length > 0) {
+    showEndScreen(true, data.winners, data.pollution);
     return;
-  }
+}
 
   socket.emit('game_update', { game_id: state.game_id });
   loadGame();
@@ -1080,11 +1097,12 @@ async function dismantlePlant(building_id) {
   if (!confirm('Dismantle the Nuclear Power Plant? This cannot be undone.')) return;
   await doAction('dismantle', building_id);
 }
-async function requestHelp(building_id) {
+// NOUVEAU
+async function requestHelp(building_id, action_type = 'upgrade') {
   const res = await fetch(`${API}/game/${state.game_id}/help/request`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ building_id, requester_slot: state.player_slot }),
+    body: JSON.stringify({ building_id, requester_slot: state.player_slot, action_type }),
   });
   const data = await res.json();
   if (!res.ok) return alert(data.error);

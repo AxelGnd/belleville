@@ -4,19 +4,19 @@ const db      = require('../db/connection');
 
 // NOUVEAU
 const EVENTS = [
-{ id: 1, type:'crisis', title:'Cold Wave', info:"Winters below -10°C can raise a city's heating demand by over 30%.", desc:'All buildings consume +1 Energy this round.', effect:'demand_plus1_all' },
-{ id: 2, type:'crisis', title:'Heat Wave', info:'Heatwaves above 35°C can push air conditioning demand up by 40%.', desc:'All buildings consume +1 Energy this round.', effect:'demand_plus1_all' },
-{ id: 3, type:'crisis', title:'Toxic Leak', info:'Industrial leaks can contaminate water supplies for over 100,000 people in days.', desc:'Hospital Lv2: nothing. Hospital Lv1/0: +2 Pollution.', effect:'toxic_leak' },
-{ id: 4, type:'crisis', title:'Material Shortage', info:'Global supply shortages can raise construction material costs by 20-50%.', desc:'All building upgrades cost +1 Credit this round.', effect:'upgrade_cost_plus1' },
-{ id: 5, type:'crisis', title:'Overcast Skies & No Wind', info:'Solar and wind output can drop by up to 80% during still, cloudy weather.', desc:'Green Energy installations produce 0 Energy this round.', effect:'green_zero' },
-{ id: 6, type:'crisis', title:'Respiratory Crisis', info:'Air pollution causes an estimated 7 million premature deaths worldwide each year.', desc:' Hospital Lv2: nothing. Lv1: -1 cr each. Lv0: -2 cr each.', effect:'respiratory_crisis' },
-{ id: 7, type:'crisis', title:'Severe Drought', info:'Droughts can reduce urban green space survival rates by more than 50%.', desc:'Parks lose their effect this round.', effect:'park_zero' },
-{ id: 8, type:'opportunity', title:'European Grants', info:'The EU has invested over 1 trillion euros in green transition funds since 2020.', desc:'Each player gains 2 Credits.', effect:'all_gain2cr' },
-{ id: 9, type:'opportunity', title:'Technological Breakthrough', info:'R&D investment cuts renewable technology costs by roughly 10% per year.', desc:'Level 2 upgrades cost 2 fewer Credits this round.', effect:'upgrade_cost_minus2' },
-{ id: 10, type:'opportunity', title:'Earth Day', info:'Earth Day mobilizes over 1 billion people globally each year for environmental action.', desc:'The next Pollution Cleanup action is free.', effect:'free_depollute' },
-{ id: 11, type:'opportunity', title:'New Bike Lanes', info:'Cities with more bike lanes see up to 15% lower local air pollution.', desc:'Reduce Pollution by 1 immediately.', effect:'pollution_minus1' },
-{ id: 12, type:'neutral', title:'Municipal Elections', info:'Voter turnout in local elections influences up to 60% of urban policy decisions.', desc:'If no Grand Project is funded this round: +1 Pollution.', effect:'elections' },
-{ id: 13, type:'neutral', title:'Environmental Audit', info:'Environmental audits can cut a city\'s industrial emissions by 10-25%.', desc:'Fossil Lv2: +2 Poll. Fossil Lv1: +1 Poll. Dismantled: -1 Poll.', effect:'audit' },
+{ id: 1, type:'crisis', title:'Cold Wave',story:'A severe cold wave sweeps through Belleville, dropping temperatures below freezing. Heating demand skyrockets across the city.', info:"Winters below -10°C can raise a city's heating demand by over 30%.", desc:'All buildings consume +1 Energy this round.', effect:'demand_plus1_all' },
+{ id: 2, type:'crisis', title:'Heat Wave',story:'An intense heat wave strikes Belleville. Air conditioning runs at maximum capacity, driving up energy demand.',  info:'Heatwaves above 35°C can push air conditioning demand up by 40%.', desc:'All buildings consume +1 Energy this round.', effect:'demand_plus1_all' },
+{ id: 3, type:'crisis', title:'Toxic Leak',story:'An industrial accident releases harmful chemicals into the air and soil. A well-equipped hospital can help contain the crisis.', info:'Industrial leaks can contaminate water supplies for over 100,000 people in days.', desc:'Hospital Lv2: nothing. Hospital Lv1/0: +2 Pollution.', effect:'toxic_leak' },
+{ id: 4, type:'crisis', title:'Material Shortage',story:'Global supply chain disruptions cause a shortage of construction materials, raising prices and delaying projects.', info:'Global supply shortages can raise construction material costs by 20-50%.', desc:'All building upgrades cost +1 Credit this round.', effect:'upgrade_cost_plus1' },
+{ id: 5, type:'crisis', title:'Overcast Skies & No Wind',story:'Heavy atmospheric stagnation brings thick fog and zero wind, reducing renewable electricity production.', info:'Solar and wind output can drop by up to 80% during still, cloudy weather.', desc:'Green Energy installations produce 0 Energy this round.', effect:'green_zero' },
+{ id: 6, type:'crisis', title:'Respiratory Crisis',story:'Air pollution reaches unhealthy levels. More residents develop breathing problems, straining healthcare services.', info:'Air pollution causes an estimated 7 million premature deaths worldwide each year.', desc:' Hospital Lv2: nothing. Lv1: -1 cr each. Lv0: -2 cr each.', effect:'respiratory_crisis' },
+{ id: 7, type:'crisis', title:'Severe Drought',story:'After months without rain, strict water restrictions make maintaining urban green spaces difficult.',  info:'Droughts can reduce urban green space survival rates by more than 50%.', desc:'Parks lose their effect this round.', effect:'park_zero' },
+{ id: 8, type:'opportunity', title:'European Grants',story:'Belleville secures funding from a European development program to invest in cleaner energy and infrastructure.', info:'The EU has invested over 1 trillion euros in green transition funds since 2020.', desc:'Each player gains 2 Credits.', effect:'all_gain2cr' },
+{ id: 9, type:'opportunity', title:'Technological Breakthrough',story:'The Research Center announces a major breakthrough in smart materials, reducing costs and resource consumption.', info:'R&D investment cuts renewable technology costs by roughly 10% per year.', desc:'Level 2 upgrades cost 2 fewer Credits this round.', effect:'upgrade_cost_minus2' },
+{ id: 10, type:'opportunity', title:'Earth Day',story:'Inspired by Earth Day, citizens volunteer to clean the streets, reducing pollution without using city funds.', info:'Earth Day mobilizes over 1 billion people globally each year for environmental action.', desc:'The next Pollution Cleanup action is free.', effect:'free_depollute' },
+{ id: 11, type:'opportunity', title:'New Bike Lanes',story:'Belleville opens a new network of bike lanes, encouraging cycling and reducing traffic pollution.', desc:'Reduce Pollution by 1 immediately.', info:'Cities with more bike lanes see up to 15% lower local air pollution.', desc:'Reduce Pollution by 1 immediately.', effect:'pollution_minus1' },
+{ id: 12, type:'neutral', title:'Municipal Elections',story:"Election season sparks intense debates, forcing leaders to cooperate on the city's future.", desc:'If no Grand Project is funded this round: +1 Pollution.', info:'Voter turnout in local elections influences up to 60% of urban policy decisions.', desc:'If no Grand Project is funded this round: +1 Pollution.', effect:'elections' },
+{ id: 13, type:'neutral', title:'Environmental Audit',story:"Scientists publish a detailed audit revealing the true climate impact of Belleville's energy mix.",  info:'Environmental audits can cut a city\'s industrial emissions by 10-25%.', desc:'Fossil Lv2: +2 Poll. Fossil Lv1: +1 Poll. Dismantled: -1 Poll.', effect:'audit' },
 ];
 const COSTS = {
   hopital:            [5, 8],
@@ -372,7 +372,8 @@ router.post('/:game_id/blackout-downgrade', async (req, res) => {
         for (const w of winners) await addLog(id, game.turn, `🏆 ${w.pseudo} won with role ${w.role}!`);
       }
 
-      return res.json({ success: true, resolved: true, winners: winners.map(w => ({ pseudo: w.pseudo, role: w.role })) });
+     // NOUVEAU
+return res.json({ success: true, resolved: true, pollution: game.pollution, winners: winners.map(w => ({ pseudo: w.pseudo, role: w.role })) });
     }
 
     await db.query("UPDATE games SET blackout_excess=$1 WHERE id=$2", [newExcess, id]);
@@ -455,29 +456,39 @@ async function applyEndOfTurnBonuses(game_id, buildings) {
   }
 }
 // ── HELP REQUEST: ask for help on an upgrade ──────────────────
+// NOUVEAU
 router.post('/:game_id/help/request', async (req, res) => {
-  try {
-    const { building_id, requester_slot } = req.body;
-    const id = req.params.game_id;
+try {
+const { building_id, requester_slot, action_type } = req.body;
+const id = req.params.game_id;
+const type = action_type === 'dismantle' ? 'dismantle' : 'upgrade';
 
-    const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
-    if (game.help_request) return res.status(400).json({ error: 'A help request is already active' });
+const game = (await db.query("SELECT * FROM games WHERE id=$1", [id])).rows[0];
+if (game.help_request) return res.status(400).json({ error: 'A help request is already active' });
 
-    const building = (await db.query("SELECT * FROM buildings WHERE id=$1 AND game_id=$2", [building_id, id])).rows[0];
-    if (!building) return res.status(404).json({ error: 'Building not found' });
+const building = (await db.query("SELECT * FROM buildings WHERE id=$1 AND game_id=$2", [building_id, id])).rows[0];
+if (!building) return res.status(404).json({ error: 'Building not found' });
 
-    let cost = COSTS[building.type]?.[building.level] ?? 4;
-    const event = game.current_event;
-    if (event?.effect === 'upgrade_cost_plus1') cost += 1;
-    if (event?.effect === 'upgrade_cost_minus1' && building.level === 1) cost = Math.max(0, cost - 1);
+let cost;
+if (type === 'dismantle') {
+  if (building.type !== 'centrale_nucleaire' || building.level === 0) {
+    return res.status(400).json({ error: 'Cannot dismantle this building' });
+  }
+  cost = 16;
+} else {
+  cost = COSTS[building.type]?.[building.level] ?? 4;
+  const event = game.current_event;
+  if (event?.effect === 'upgrade_cost_plus1') cost += 1;
+  if (event?.effect === 'upgrade_cost_minus1' && building.level === 1) cost = Math.max(0, cost - 1);
+}
 
-    const requester = (await db.query("SELECT * FROM players WHERE game_id=$1 AND slot=$2", [id, requester_slot])).rows[0];
-    const needed = Math.max(0, cost - requester.credits);
+const requester = (await db.query("SELECT * FROM players WHERE game_id=$1 AND slot=$2", [id, requester_slot])).rows[0];
+const needed = Math.max(0, cost - requester.credits);
 
-    const help_request = {
-      building_id, requester_slot, cost,
-      needed, contributions: {}, status: 'open'
-    };
+const help_request = {
+building_id, requester_slot, cost, action_type: type,
+needed, contributions: {}, status: 'open'
+};
 
     await db.query("UPDATE games SET help_request=$1 WHERE id=$2", [JSON.stringify(help_request), id]);
     await addLog(id, game.turn, `🤝 Player ${requester_slot} asks for help to upgrade ${building.type}`);
@@ -581,27 +592,38 @@ router.post('/:game_id/help/launch', async (req, res) => {
     const requesterContrib = hr.requester_contribution ?? 0;
 const totalAvailable   = requesterContrib + totalContributed;
 
+// NOUVEAU
 if (totalAvailable < hr.cost) {
-  return res.status(400).json({ error: `Not enough total credits (have ${totalAvailable}, need ${hr.cost})` });
+return res.status(400).json({ error: `Not enough total credits (have ${totalAvailable}, need ${hr.cost})` });
 }
 
-    // Note : requesterContrib a déjà été déduit des crédits du joueur au moment
-    // de sa contribution (route /help/requester-contribute). On ne le déduit
-    // pas une seconde fois ici.
+// Note : requesterContrib a déjà été déduit des crédits du joueur au moment
+// de sa contribution (route /help/requester-contribute). On ne le déduit
+// pas une seconde fois ici.
 
-    // Améliore le bâtiment
-    const building = (await db.query("SELECT * FROM buildings WHERE id=$1 AND game_id=$2", [hr.building_id, id])).rows[0];
-    await db.query("UPDATE buildings SET level=level+1, owner_slot=$1 WHERE id=$2", [player_slot, hr.building_id]);
+const building = (await db.query("SELECT * FROM buildings WHERE id=$1 AND game_id=$2", [hr.building_id, id])).rows[0];
 
-    if (building.type === 'centrale_nucleaire' && building.level === 1) {
-      await db.query("UPDATE games SET fossil_level=2, pollution=LEAST(20,pollution+4) WHERE id=$1", [id]);
-    }
+if (hr.action_type === 'dismantle') {
+  await db.query("UPDATE buildings SET level=0, owner_slot=NULL WHERE id=$1", [hr.building_id]);
+  await db.query("UPDATE games SET fossil_level=0, pollution=GREATEST(0,pollution-10) WHERE id=$1", [id]);
+  await db.query("UPDATE games SET help_request=NULL WHERE id=$1", [id]);
+  await addLog(id, game.turn, `☢️ Player ${player_slot} dismantled the Nuclear Power Plant with team help! (-16 cr, -10 pollution)`);
+  await nextPlayer(id, game);
+  return res.json({ success: true });
+}
 
-    await db.query("UPDATE games SET help_request=NULL WHERE id=$1", [id]);
-    await addLog(id, game.turn, `🏗 Player ${player_slot} upgrades ${building.type} → Lv${building.level + 1} with team help!`);
-    await nextPlayer(id, game);
+// Améliore le bâtiment
+await db.query("UPDATE buildings SET level=level+1, owner_slot=$1 WHERE id=$2", [player_slot, hr.building_id]);
 
-    res.json({ success: true });
+if (building.type === 'centrale_nucleaire' && building.level === 1) {
+await db.query("UPDATE games SET fossil_level=2, pollution=LEAST(20,pollution+4) WHERE id=$1", [id]);
+}
+
+await db.query("UPDATE games SET help_request=NULL WHERE id=$1", [id]);
+await addLog(id, game.turn, `🏗 Player ${player_slot} upgrades ${building.type} → Lv${building.level + 1} with team help!`);
+await nextPlayer(id, game);
+
+res.json({ success: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
