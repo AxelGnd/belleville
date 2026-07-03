@@ -20,6 +20,7 @@ const EVENTS = [
 { id: 12, type:'neutral', title:'Municipal Elections',story:"Election season sparks intense debates, forcing leaders to cooperate on the city's future.", desc:'If no Grand Project is funded this round: +1 Pollution.', info:'Voter turnout in local elections influences up to 60% of urban policy decisions.', desc:'If no Grand Project is funded this round: +1 Pollution.', effect:'elections' },
 { id: 13, type:'neutral', title:'Environmental Audit',story:"Scientists publish a detailed audit revealing the true climate impact of Belleville's energy mix.",  info:'Environmental audits can cut a city\'s industrial emissions by 10-25%.', desc:'Fossil Lv2: +2 Poll. Fossil Lv1: +1 Poll. Dismantled: -1 Poll.', effect:'audit' },
 ];
+
 const COSTS = {
   hopital:            [5, 8],
   ecole:              [5, 8],
