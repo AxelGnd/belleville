@@ -2,6 +2,8 @@ const express = require('express');
 const router  = express.Router();
 const db      = require('../db/connection');
 
+
+
 // NOUVEAU
 const EVENTS = [
 { id: 1, type:'crisis', title:'Cold Wave',story:'A severe cold wave sweeps through Belleville, dropping temperatures below freezing. Heating demand skyrockets across the city.', info:"Winters below -10°C can raise a city's heating demand by over 30%.", desc:'All buildings consume +1 Energy this round.', effect:'demand_plus1_all' },
