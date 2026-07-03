@@ -478,14 +478,15 @@ function renderGame(data) {
   // Zone de phase
   let phaseZone = '';
 
-  if (game.phase === 'event') {
+  // NOUVEAU
+if (game.phase === 'event') {
   phaseZone = `
     <div class="phase-banner event">
       <div class="phase-label">📅 Phase 1 — Event</div>
-      <div class="phase-desc">Player 1 enters the event number from the card deck.</div>
+      <div class="phase-desc">Player 1 enters the 3-letter code printed on the event card (ex: COL, HEA, TOX...).</div>
       <div style="display:flex;gap:8px;margin-top:8px">
-        <input id="event-number" type="number" min="1" max="13" placeholder="Event # (1-13)"
-          style="flex:1;padding:8px 12px;background:#0f1923;border:1px solid #2d3f50;border-radius:8px;color:#fff;font-size:14px;outline:none" />
+        <input id="event-number" type="text" maxlength="3" placeholder="Code (ex: COL)"
+          style="flex:1;padding:8px 12px;background:#0f1923;border:1px solid #2d3f50;border-radius:8px;color:#fff;font-size:14px;outline:none;text-transform:uppercase" />
         <button class="btn btn-primary" style="width:auto;padding:8px 16px;margin:0" onclick="submitEvent()">→</button>
       </div>
     </div>
@@ -722,47 +723,58 @@ function showBuildMenu() {
 
   const rows = Object.entries(grouped).map(([type, list]) => {
     // Cas spécial : centrale nucléaire (upgrade ou démantèlement)
-    if (type === 'centrale_nucleaire') {
-      const centrale = list[0];
-      const canUpgrade   = centrale.level === 1;
-      const canDismantle = centrale.level >= 1;
+    // NOUVEAU — bloc complet et fonctionnel
+if (type === 'centrale_nucleaire') {
+  const centrale = list[0];
+  const canUpgrade   = centrale.level === 1;
+  const canDismantle = centrale.level >= 1;
 
-      if (!canUpgrade && !canDismantle) {
-        // NOUVEAU
-return `
-  <div class="build-row">
-    <div class="build-left">
-      <span class="build-icon">⚛️</span>
-      <div class="build-info">
-        <div class="build-name">Nuclear Power Plant (Lv${centrale.level})</div>
+  if (!canUpgrade && !canDismantle) {
+    return `
+      <div class="build-row max">
+        <div class="build-left">
+          <span class="build-icon">⚛️</span>
+          <div class="build-info">
+            <div class="build-name">Nuclear Power Plant</div>
+            <div class="build-status" style="color:#6b7280">Dismantled</div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div class="build-row">
+      <div class="build-left">
+        <span class="build-icon">⚛️</span>
+        <div class="build-info">
+          <div class="build-name">Nuclear Power Plant (Lv${centrale.level})</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        ${canUpgrade ? `
+          <div style="text-align:center">
+            <div class="build-cost">💰 4 cr</div>
+            ${me?.credits >= 4 ? `
+              <button class="build-btn" onclick="doAction('upgrade',${centrale.id});closeModal()">Lv 1→2</button>
+            ` : `
+              <button class="build-btn disabled" disabled>Lv 1→2</button>
+              <button class="build-btn" style="background:#60a5fa;margin-top:4px" onclick="requestHelp(${centrale.id},'upgrade');closeModal()">🤝 Ask for help</button>
+            `}
+          </div>` : ''}
+        ${canDismantle ? `
+          <div style="text-align:center">
+            <div class="build-cost">💰 16 cr</div>
+            ${me?.credits >= 16 ? `
+              <button class="build-btn" style="background:#ef4444" onclick="dismantlePlant(${centrale.id});closeModal()">☢️ Dismantle</button>
+            ` : `
+              <button class="build-btn disabled" disabled>☢️ Dismantle</button>
+              <button class="build-btn" style="background:#60a5fa;margin-top:4px" onclick="requestHelp(${centrale.id},'dismantle');closeModal()">🤝 Ask for help</button>
+            `}
+          </div>` : ''}
       </div>
     </div>
-    <div style="display:flex;gap:8px">
-      ${canUpgrade ? `
-        <div style="text-align:center">
-          <div class="build-cost">💰 4 cr</div>
-          ${me?.credits >= 4 ? `
-            <button class="build-btn" onclick="doAction('upgrade',${centrale.id});closeModal()">Lv 1→2</button>
-          ` : `
-            <button class="build-btn disabled" disabled>Lv 1→2</button>
-            <button class="build-btn" style="background:#60a5fa;margin-top:4px" onclick="requestHelp(${centrale.id},'upgrade');closeModal()">🤝 Ask for help</button>
-          `}
-        </div>` : ''}
-      ${canDismantle ? `
-        <div style="text-align:center">
-          <div class="build-cost">💰 16 cr</div>
-          ${me?.credits >= 16 ? `
-            <button class="build-btn" style="background:#ef4444" onclick="dismantlePlant(${centrale.id});closeModal()">☢️ Dismantle</button>
-          ` : `
-            <button class="build-btn disabled" disabled>☢️ Dismantle</button>
-            <button class="build-btn" style="background:#60a5fa;margin-top:4px" onclick="requestHelp(${centrale.id},'dismantle');closeModal()">🤝 Ask for help</button>
-          `}
-        </div>` : ''}
-    </div>
-  </div>
-`;
-    }
-  }
+  `;
+}
     const hasLv0 = list.find(b => b.level === 0);
     const hasLv1 = list.find(b => b.level === 1);
 
@@ -1012,24 +1024,18 @@ function showEndScreen(won, winners, pollution = 0) {
 
   if (won) {
     const debrief = getPollutionDebrief(pollution);
-    const winnerCards = winners.map(w => {
-      const role = ROLES.find(r => r.id === w.role);
-      return `
-        <div style="
-          background:#14532d22;
-          border:1px solid #22c55e44;
-          border-radius:12px;
-          padding:1.25rem;
-          margin-bottom:10px;
-          text-align:center;
-        ">
-          <div style="font-size:48px;margin-bottom:8px">${role?.icon || '🏆'}</div>
-          <div style="font-size:20px;font-weight:800;margin-bottom:4px">${w.pseudo}</div>
-          <div style="font-size:14px;color:#22c55e;font-weight:600">${role?.name || w.role}</div>
-          <div style="font-size:12px;color:#9ca3af;margin-top:6px">${role?.desc || ''}</div>
-        </div>
-      `;
-    }).join('');
+    // NOUVEAU
+const winnerCards = (winners || []).map(w => {
+  const role = ROLES.find(r => r.id === w.role);
+  return `
+    <div style="background:#14532d22;border:1px solid #22c55e44;border-radius:12px;padding:1.25rem;margin-bottom:10px;text-align:center">
+      <div style="font-size:48px;margin-bottom:8px">${role?.icon || '🏆'}</div>
+      <div style="font-size:20px;font-weight:800;margin-bottom:4px;color:#fff">${w.pseudo || 'Unknown player'}</div>
+      <div style="font-size:14px;color:#22c55e;font-weight:600">${role?.name || w.role || 'Unknown role'}</div>
+      <div style="font-size:12px;color:#9ca3af;margin-top:6px">${role?.desc || ''}</div>
+    </div>
+  `;
+}).join('');
 
     // NOUVEAU
     show(`
@@ -1037,6 +1043,7 @@ function showEndScreen(won, winners, pollution = 0) {
         <div style="font-size:64px;margin-bottom:1rem">🏆</div>
         <h1 style="color:#22c55e;margin-bottom:0.5rem">Victory!</h1>
         <p style="margin-bottom:2rem">A player has completed their secret objective!</p>
+
         ${winnerCards}
         <div style="background:#1e2d3d;border:1px solid #2d3f50;border-radius:10px;padding:14px;margin:1.5rem 0;font-size:13px;color:#d1d5db">
           <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">City debrief · Pollution: ${pollution}/20</div>
